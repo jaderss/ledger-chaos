@@ -1,0 +1,11 @@
+results/*
+!results/sample/
+target/
+node_modules/
+dist/
+coverage.out
+.scannerwork/
+.idea/
+.vscode/
+.DS_Store
+.env.local
