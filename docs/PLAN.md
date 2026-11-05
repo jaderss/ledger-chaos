@@ -142,13 +142,12 @@ Commits, in this order. The services move first while the Go checker still judge
 
 Done when: no Go in the repo, `./mvnw verify` runs every test, and the new batch gives every mode its expected verdict.
 
-### Phase 7: Write-up and launch
+### Phase 7: Write-up
 
 * README opens with the result table: correct mode with zero violations, naive modes with what they lost.
 * `docs/INVARIANTS.md` explains each rule with the SQL that checks it.
-* Posts on r/java, Hacker News and LinkedIn. Fintech recruiters read this kind of post.
 
-Done when: README and posts reviewed by Jader.
+Done when: README and `docs/INVARIANTS.md` reviewed by Jader.
 
 ---
 
@@ -164,7 +163,7 @@ Done when: README and posts reviewed by Jader.
 | `simplify` | Keep the naive modes small and obvious. | Phase 4 |
 | `dataviz` | Report page charts and colors. | Phase 5 |
 | `tech-design-writer` | `SDD.md`, `INVARIANTS.md`. | Phases 0 and 7 |
-| `jader-voice` | README, commit messages, posts. | Every phase, final pass in Phase 7 |
+| `jader-voice` | README, commit messages. | Every phase, final pass in Phase 7 |
 | `run` | Start the stack and confirm a change works. | Any phase |
 
 ---
