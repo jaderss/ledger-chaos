@@ -76,3 +76,33 @@ services:
     volumes:
       - ./infra/toxiproxy/toxiproxy.json:/config/toxiproxy.json:ro
     ports: ["8474:8474", "15432:15432", "19092:19092"]
+
+  ledger:
+    build:
+      context: services
+      dockerfile: ledger/Dockerfile
+      args:
+        JAVA_VERSION: ${JAVA_VERSION:-25}
+    image: ledger-chaos/ledger
+    depends_on:
+      toxiproxy:
+        condition: service_started
+      db-init:
+        condition: service_completed_successfully
+    cpus: ${APP_CPUS:-2}
+    mem_limit: ${APP_MEMORY_MB:-1536}m
+    environment:
+      DB_HOST: toxiproxy
+      DB_PORT: 15432
+      DB_SOCKET_TIMEOUT_S: ${DB_SOCKET_TIMEOUT_S:-5}
+      LEDGER_DB_PASSWORD: ${LEDGER_DB_PASSWORD:-ledger}
+      POOL_SIZE: ${POOL_SIZE:-20}
+      LEDGER_MODE: ${LEDGER_MODE:-correct}
+      LEDGER_LOCKING: ${LEDGER_LOCKING:-ordered}
+      JAVA_OPTS: -XX:+Use${JVM_GC:-ParallelGC} -XX:MaxRAMPercentage=${HEAP_PERCENT:-75}
+    ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 2s
+      timeout: 2s
+      retries: 60

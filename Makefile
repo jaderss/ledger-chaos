@@ -3,10 +3,11 @@ export
 
 COMPOSE := docker compose
 
-.PHONY: help up down clean test test-java
+.PHONY: help up ledger down clean test test-java
 
 help:
 	@echo "make up      start Postgres, Kafka and Toxiproxy, create roles, databases and topics"
+	@echo "make ledger  build and start the ledger behind Toxiproxy on port 8080"
 	@echo "make test    Maven verify for the services"
 	@echo "make down    stop everything"
 	@echo "make clean   stop everything, drop volumes and results"
@@ -15,6 +16,9 @@ up:
 	$(COMPOSE) up -d --wait postgres kafka toxiproxy
 	$(COMPOSE) run --rm db-init
 	$(COMPOSE) run --rm kafka-topics
+
+ledger: up
+	$(COMPOSE) up -d --build --wait ledger
 
 test: test-java
 

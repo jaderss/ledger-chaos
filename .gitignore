@@ -9,3 +9,4 @@ coverage.out
 .vscode/
 .DS_Store
 .env.local
+.jqwik-database

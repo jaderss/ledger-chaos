@@ -111,6 +111,7 @@ create table posting (
 );
 
 create index posting_account on posting (account_id);
+create index posting_transfer on posting (transfer_id);
 
 create table outbox (
     id           uuid primary key,
@@ -179,15 +180,17 @@ Content-Type: application/json
 | Currency differs from an account | `422` | Problem `currency-mismatch`. Not stored |
 | Unknown account | `404` | Problem `account-not-found`. Not stored |
 | Missing or malformed key | `400` | Problem `idempotency-key-required` |
+| Invalid body, or `fromAccount` equal to `toAccount` | `400` | Validation problem, or `invalid-request`. Not stored |
+| Postings that do not sum to zero (a bug) | `500` | Problem `ledger-integrity`. The deferred trigger rolls the transaction back |
 | Database unavailable or timeout | `503` | Problem `unavailable`. Outcome unknown to the client |
 
-Errors use `ProblemDetail` (RFC 9457), with `type` under `/problems/`.
+Errors use `ProblemDetail` (RFC 9457), with `type` under `/problems/`. A rejected transfer's problem also carries `transferId` and `transferStatus`, so the chaos runner can match a replayed `422` to the first one. The field is not called `status`, because RFC 9457 already uses `status` for the HTTP code.
 
 `X-Request-Id` is optional. `CorrelationIdFilter` generates one when it is missing, puts it in MDC, and returns it in the response header. The ledger stores it on the transfer and in the event, and the relay and projector log it, so one id follows a transfer from the request to the read model.
 
 Other endpoints: `GET /transfers/{id}`, `GET /transfers?idempotencyKey=` (used by the checker for unknown outcomes), `GET /accounts/{id}`, `POST /accounts` (setup only).
 
-`POST /accounts` takes an id, a currency and `allowOverdraft`, never an opening balance. A balance that does not come from postings would break I2. Money enters through one **mint** account per currency, created with `allowOverdraft = true`. Before the faults start, the chaos runner sends one funding transfer of `FUNDING_MINOR` from the mint to each workload account, through `POST /transfers` and recorded in the history like any other call. The mint goes negative by the total funded, so I1 still holds, and the projector sees the funding events like any other. The workload never uses the mint after that.
+`POST /accounts` takes an id, a currency and `allowOverdraft`, never an opening balance. It is idempotent on the id: `201` when created, `200` when the same account exists, `409` `account-conflict` when it exists with other settings. A balance that does not come from postings would break I2. Money enters through one **mint** account per currency, created with `allowOverdraft = true`. Before the faults start, the chaos runner sends one funding transfer of `FUNDING_MINOR` from the mint to each workload account, through `POST /transfers` and recorded in the history like any other call. The mint goes negative by the total funded, so I1 still holds, and the projector sees the funding events like any other. The workload never uses the mint after that.
 
 ### 5.6 Transfer algorithm
 
@@ -386,24 +389,29 @@ ledger-chaos/
 │   │       │   │   ├── AccountId.java, TransferId.java, IdempotencyKey.java   records, no raw UUID or String in signatures
 │   │       │   │   ├── Account.java, Transfer.java, Posting.java
 │   │       │   │   ├── TransferDecision.java        sealed: Post, Reject
+│   │       │   │   ├── TransferCommand.java         parsed request, gives the RequestHash
+│   │       │   │   ├── TransferPosted.java          event contract §5.7
 │   │       │   │   └── RequestHash.java
 │   │       │   ├── app/
 │   │       │   │   ├── LedgerProperties.java        @ConfigurationProperties, @Validated, mode and locking enums
 │   │       │   │   ├── TransferService.java         interface
+│   │       │   │   ├── TransferOutcome.java         sealed: Created, Replayed, KeyMismatch
+│   │       │   │   ├── TransferServiceConfig.java   picks the TransferService from LedgerProperties
 │   │       │   │   ├── LockingTransferService.java  correct mode
 │   │       │   │   ├── SerializableTransferService.java
 │   │       │   │   └── naive/                       one class per naive mode
 │   │       │   └── persistence/                     JdbcClient stores
-│   │       │       ├── AccountStore.java, TransferStore.java, PostingStore.java, OutboxStore.java
+│   │       │       ├── AccountStore.java, IdempotencyStore.java, TransferStore.java, PostingStore.java, OutboxStore.java
 │   │       ├── main/resources/
 │   │       │   ├── application.yaml
 │   │       │   └── db/migration/V1__ledger.sql, V2__posting_triggers.sql
 │   │       └── test/java/dev/jaderss/ledger/
-│   │           ├── domain/MoneyTest.java, TransferDecisionTest.java
-│   │           ├── domain/LedgerProperties.java     jqwik
-│   │           ├── app/TransferConcurrencyTest.java Testcontainers, virtual threads
-│   │           ├── app/IdempotencyTest.java
-│   │           ├── api/TransferControllerTest.java  port 0
+│   │           ├── domain/MoneyTest.java, TransferDecisionTest.java, RequestHashTest.java
+│   │           ├── domain/LedgerPropertyTest.java   jqwik
+│   │           ├── app/TransferConcurrencyTest.java Testcontainers, virtual threads, parallel duplicate keys
+│   │           ├── persistence/PostingTriggersTest.java   sum-zero and append-only triggers
+│   │           ├── api/TransferControllerTest.java  port 0, every row of §5.5 except 503
+│   │           ├── api/AccountControllerTest.java
 │   │           └── ArchitectureTest.java            ArchUnit, domain has no framework imports
 │   ├── relay/
 │   │   └── src/main/java/dev/jaderss/relay/
@@ -561,7 +569,7 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 | Level | What | Where |
 |---|---|---|
 | Unit | `Money`, `TransferDecision`, request hash | `ledger` domain |
-| Property | Random transfer sequences keep I1 to I3 | `LedgerProperties` (jqwik) |
+| Property | Random transfer sequences keep I1 to I3 | `LedgerPropertyTest` (jqwik) |
 | Mutation | PIT on the domain package | `./mvnw -Pmutation verify`, not on every push |
 | Integration | Postgres, Kafka, Toxiproxy in Testcontainers. Duplicates, parallel keys, relay crash, projector crash | Each service |
 | HTTP | Server on port 0, every row of the §5.5 table | `TransferControllerTest` |
