@@ -53,7 +53,7 @@ record Outcome(
         return !UNKNOWN.equals(phase);
     }
 
-    boolean ok() {
+    boolean isOk() {
         return OK.equals(phase);
     }
 }

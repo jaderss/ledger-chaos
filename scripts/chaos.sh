@@ -5,7 +5,8 @@ MODE=${1:-${LEDGER_MODE:-correct}}
 SCENARIO=${2:-${SCENARIO:-contention}}
 LOCKING=${LEDGER_LOCKING:-ordered}
 RUN_ID=${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$MODE-$LOCKING-$SCENARIO}
-export LEDGER_MODE=$MODE SCENARIO RUN_ID
+HOST_USER=$(id -u):$(id -g)
+export LEDGER_MODE=$MODE SCENARIO RUN_ID HOST_USER
 
 echo "run $RUN_ID: mode $MODE, locking $LOCKING, scenario $SCENARIO"
 docker compose --profile tools down --remove-orphans >/dev/null 2>&1 || true

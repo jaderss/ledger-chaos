@@ -83,11 +83,12 @@ final class Docker {
     }
 
     Response call(String method, String path) throws IOException {
-        try (var channel = SocketChannel.open(socket)) {
+        try (var channel = SocketChannel.open(socket);
+                var in = Channels.newInputStream(channel)) {
             var request = "%s %s HTTP/1.0\r\nHost: docker\r\nContent-Length: 0\r\n\r\n".formatted(method, path);
             channel.write(ByteBuffer.wrap(request.getBytes(StandardCharsets.US_ASCII)));
             var raw = new ByteArrayOutputStream();
-            Channels.newInputStream(channel).transferTo(raw);
+            in.transferTo(raw);
             return parse(raw.toString(StandardCharsets.UTF_8));
         }
     }

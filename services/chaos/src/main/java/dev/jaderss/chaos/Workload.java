@@ -55,7 +55,7 @@ final class Workload {
             var key = newId();
             while (true) {
                 var outcome = attempt(FUNDING_WORKER, key, body, false);
-                if (outcome.ok()) {
+                if (outcome.isOk()) {
                     break;
                 }
                 if (outcome.definite()) {
@@ -115,7 +115,7 @@ final class Workload {
         for (var i = 0; i <= load.retries(); i++) {
             var outcome = attempt(worker, key, body, false);
             if (outcome.definite()) {
-                if (outcome.ok()) {
+                if (outcome.isOk()) {
                     remember(new Settled(key, body));
                 }
                 return;

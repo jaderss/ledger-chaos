@@ -223,6 +223,7 @@ services:
         MODULE: checker
       target: tool
     image: ledger-chaos/checker
+    user: ${HOST_USER:-65532:65532}
     volumes:
       - ./results:/results
     environment:

@@ -12,7 +12,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 final class LedgerClient {
 
-    private static final String JSON = "application/json";
+    private static final String APPLICATION_JSON = "application/json";
 
     private final URI base;
     private final HttpClient http;
@@ -27,7 +27,7 @@ final class LedgerClient {
     void createAccount(String id, String currency, boolean overdraft) throws IOException, InterruptedException {
         var body = json.writeValueAsBytes(Map.of("id", id, "currency", currency, "allowOverdraft", overdraft));
         var request = HttpRequest.newBuilder(base.resolve("/accounts"))
-                .header("Content-Type", JSON)
+                .header("Content-Type", APPLICATION_JSON)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body))
                 .build();
         var status = http.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
@@ -44,7 +44,7 @@ final class LedgerClient {
                 "currency", body.currency()));
         var request = HttpRequest.newBuilder(base.resolve("/transfers"))
                 .timeout(timeout)
-                .header("Content-Type", JSON)
+                .header("Content-Type", APPLICATION_JSON)
                 .header("Idempotency-Key", key)
                 .header("X-Request-Id", key)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(payload))

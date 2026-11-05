@@ -13,14 +13,14 @@ record Result(
         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> examples) {
 
     static final class Violations {
-        private static final int EXAMPLES = 5;
+        private static final int MAX_EXAMPLES = 5;
 
         private int count;
         private final List<String> examples = new ArrayList<>();
 
         void add(String format, Object... args) {
             count++;
-            if (examples.size() < EXAMPLES) {
+            if (examples.size() < MAX_EXAMPLES) {
                 examples.add(format.formatted(args));
             }
         }
