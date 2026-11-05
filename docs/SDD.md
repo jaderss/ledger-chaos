@@ -357,7 +357,7 @@ End of run: stop the workload, heal everything, write `run.json` with the seed a
 
 Output: one line per invariant with pass or fail, a count and up to five examples, a stats line, a verdict line, plus `report.json` with the verdict, the stats and the run settings from `run.json`. The stats come from `history.jsonl` and `faults.jsonl`, workload only (the funding transfers are left out): distinct keys sent, ok answers per second, p50 and p99 latency of definite answers, answers per second by outcome, the fault windows in seconds from the start, and `xact_commit` and `xact_rollback` of the ledger database. The commit count includes the relay's polling, so the report compares rollbacks against ok answers, not against commits. The checker knows the **Must fail** set of each mode (§5.12) and judges the run itself: `correct` passes when every invariant passes, a naive mode passes when every invariant in its set fails. Exit code `0` on a passing verdict, `1` otherwise, so `make chaos` and `chaos.yml` need no logic of their own. An unknown `LEDGER_MODE` is an error before anything is loaded.
 
-Each invariant is a pure function over a `Snapshot` of the history, both databases and the topic. The loaders are separate. That lets the tests corrupt one field of a clean snapshot per invariant and assert that exactly that invariant fails. The checker connects as `postgres` straight to port 5432 and to Kafka on the `INTERNAL` listener, never through Toxiproxy.
+The checker is a plain Java module, `services/checker`, with no Spring context: Jdbi for both databases, the Kafka admin client for offsets and lag, and a consumer with `assign()` and no `group.id` to read the topic, so judging a run never joins or moves the projector's group. Each invariant is a pure function over a `Snapshot` of the history, both databases and the topic. The loaders are separate. That lets the tests corrupt one field of a clean snapshot per invariant and assert that exactly that invariant fails. The checker connects as `postgres` straight to port 5432 and to Kafka on the `INTERNAL` listener, never through Toxiproxy.
 
 ### 5.12 Naive modes
 
@@ -519,17 +519,34 @@ ledger-chaos/
 │   │       └── test/java/dev/jaderss/relay/
 │   │           ├── OutboxRelayTest.java             crash between send and mark, parallel batches
 │   │           └── RelayPropertiesTest.java
-│   └── projector/
+│   ├── projector/
+│   │   └── src/
+│   │       ├── main/java/dev/jaderss/projector/
+│   │       │   ├── Application.java
+│   │       │   ├── TransferPostedListener.java      @KafkaListener, manual ack
+│   │       │   ├── KafkaErrorConfig.java            unlimited backoff, DLT only for records that do not parse
+│   │       │   ├── BalanceProjection.java           processed_event and upserts in account id order, one Jdbi transaction
+│   │       │   ├── JdbiConfig.java                  the Jdbi bean, after Flyway
+│   │       │   └── TransferPosted.java              record, own copy of the contract, refuses unbalanced postings
+│   │       ├── main/resources/db/migration/V1__projector.sql
+│   │       └── test/java/dev/jaderss/projector/ProjectorTest.java   duplicates, parallel partitions, DLT
+│   └── checker/                     plain Java, no Spring
 │       └── src/
-│           ├── main/java/dev/jaderss/projector/
-│           │   ├── Application.java
-│           │   ├── TransferPostedListener.java      @KafkaListener, manual ack
-│           │   ├── KafkaErrorConfig.java            unlimited backoff, DLT only for records that do not parse
-│           │   ├── BalanceProjection.java           processed_event and upserts in account id order, one Jdbi transaction
-│           │   ├── JdbiConfig.java                  the Jdbi bean, after Flyway
-│           │   └── TransferPosted.java              record, own copy of the contract, refuses unbalanced postings
-│           ├── main/resources/db/migration/V1__projector.sql
-│           └── test/java/dev/jaderss/projector/ProjectorTest.java   duplicates, parallel partitions, DLT
+│           ├── main/java/dev/jaderss/checker/
+│           │   ├── Checker.java             quiet wait, load, check, print, report.json
+│           │   ├── Config.java              settings from the environment
+│           │   ├── Invariants.java          pure checks over a Snapshot
+│           │   ├── Mode.java                Must fail set per mode, the verdict of the run
+│           │   ├── Snapshot.java            history, ledger, topic, projector balances, quiet
+│           │   ├── History.java             history.jsonl grouped by key
+│           │   ├── Stats.java               throughput, latency, answers per second, fault windows
+│           │   ├── Databases.java           Jdbi loaders for both databases
+│           │   └── TopicReader.java         Kafka admin offsets and lag, an assigned consumer with no group
+│           └── test/java/dev/jaderss/checker/
+│               ├── InvariantsTest.java      one corruption per invariant
+│               ├── StoresTest.java          loaders and topic reads, Testcontainers
+│               ├── CheckerTest.java         whole run against a fixture system
+│               └── ArchitectureTest.java    no service code, no Spring
 ├── chaos/                           Go, standard library only
 │   ├── Dockerfile
 │   ├── go.mod
@@ -542,18 +559,6 @@ ledger-chaos/
 │   ├── toxiproxy.go
 │   ├── history.go
 │   └── *_test.go                    fakes for the ledger, Docker and Toxiproxy
-├── checker/                         Go
-│   ├── Dockerfile
-│   ├── go.mod
-│   ├── main.go                      quiet wait, load, check, print, report.json
-│   ├── invariants.go                pure checks over a Snapshot
-│   ├── verdict.go                   Must fail set per mode, pass or fail of the run
-│   ├── stats.go                     throughput, latency, answers per second, fault windows
-│   ├── history.go
-│   ├── db.go                        pgx loaders for both databases
-│   ├── topic.go                     franz-go, reads ledger.transfers from the start, offsets and lag
-│   ├── linearizability.go           Porcupine, stretch goal
-│   └── *_test.go                    one corruption per invariant, loaders against the compose stack
 ├── report/                          React, Vite, Recharts, nginx. Reads every results/sample/*/report.json at build time
 ├── scripts/
 │   ├── chaos.sh                     one mode and scenario per call
@@ -583,18 +588,14 @@ Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on
 | Spring Boot | 4.1.2 | Parent of the three services |
 | Spring Framework | 7.0.10 | BOM |
 | Spring Kafka | 4.1.2 | BOM, `relay` and `projector`, and `ledger` for the `dual-write` mode only |
-| Kafka clients | 4.2.2 | BOM |
+| Kafka clients | 4.2.2 | BOM, also the checker's admin client and consumer |
 | Jackson | 3.1.7 | BOM |
 | Flyway | 12.4.0 | BOM, plus `flyway-database-postgresql` |
 | PostgreSQL JDBC | 42.7.14 | BOM |
 | HikariCP | 7.0.2 | BOM |
-| Jdbi | 3.55.0 | `jdbi3-core` and `jdbi3-postgres` in the three services. Not in the BOM: `jdbi3-bom` is imported in the parent pom |
+| Jdbi | 3.55.0 | `jdbi3-core` and `jdbi3-postgres` in the three services and the checker. Not in the BOM: `jdbi3-bom` is imported in the parent pom |
 | Micrometer | 1.17.2 | BOM, Prometheus registry through Actuator |
-| Go | 1.27 | `chaos` and `checker` |
-| pgx | v5.12.0 | `checker` |
-| franz-go | v1.22.2 | `checker`, topic scan |
-| franz-go `kadm` | v1.19.0 | `checker`, offsets and consumer lag. Separate module from franz-go |
-| Porcupine | v1.3.1 | `checker`, stretch goal |
+| Go | 1.27 | `chaos` |
 | PostgreSQL image | 18.6 | One instance, two databases |
 | Kafka image | `apache/kafka:4.4.0` | KRaft, single broker |
 | Toxiproxy image | `ghcr.io/shopify/toxiproxy:2.13.0` | |
@@ -714,10 +715,10 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 **What:** Spring's `JdbcClient` with `TransactionTemplate`, which the services used up to Phase 5, or typed SQL, or repositories.
 **Why not:** Jdbi keeps the SQL as plain text blocks, so locking and `on conflict` stay visible, and the transaction is explicit in the code: `inTransaction` with its isolation level, `afterCommit` on the handle. With Spring the transaction is bound to the thread, and the error types come from Spring's translation instead of the SQLState. jOOQ adds code generation and 5 MB for a few statements, Spring Data hides them behind repositories. `jdbi3-spring` would join Spring's transactions, and `jdbi3-sqlobject` would move the SQL into annotations: both rejected, one transaction model and visible SQL. `spring-jdbc` stays on the classpath, because Boot's `DataSource` and Flyway setup need it, and `ArchitectureTest` keeps the code off it.
 
-### 10.3 Jepsen and Elle instead of a Go checker
+### 10.3 Jepsen and Elle instead of an own checker
 
 **What:** the reference tools for this kind of test.
-**Why not:** Clojure and a separate control node raise the bar for readers and contributors. The Go checker covers the ledger rules, and Porcupine covers linearizability.
+**Why not:** Clojure and a separate control node raise the bar for readers and contributors. The checker covers the ledger rules in the same language as the services, and linearizability (I10) stays a stretch goal.
 
 ### 10.4 `BigDecimal` for money
 

@@ -19,6 +19,7 @@
         <module>ledger</module>
         <module>relay</module>
         <module>projector</module>
+        <module>checker</module>
     </modules>
 
     <properties>

@@ -26,7 +26,7 @@ jobs:
         run: make up
       - name: Go vet, tests and coverage
         run: |
-          for m in chaos checker; do
+          for m in chaos; do
             docker run --rm -v "$PWD/$m":/src -w /src golang:1.27 sh -c 'test -z "$(gofmt -l .)" && go vet ./...' || exit 1
           done
           make test-go

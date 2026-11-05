@@ -214,9 +214,10 @@ services:
   checker:
     profiles: [tools]
     build:
-      context: checker
+      context: services
       args:
-        GO_VERSION: ${GO_VERSION:-1.27}
+        JAVA_VERSION: ${JAVA_VERSION:-25}
+        MODULE: checker
     image: ledger-chaos/checker
     volumes:
       - ./results:/results

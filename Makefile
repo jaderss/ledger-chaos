@@ -53,7 +53,7 @@ GO_TEST := docker run --rm --network ledger-chaos_default -e TEST_POSTGRES_DSN=p
 	-e TEST_KAFKA_BROKERS=kafka:29092 -v ledger-chaos-gomod:/go/pkg/mod
 
 test-go: up
-	for m in chaos checker; do $(GO_TEST) -v "$$PWD/$$m":/src -w /src golang:$(GO_VERSION) go test -race -coverprofile=coverage.out ./... || exit 1; done
+	for m in chaos; do $(GO_TEST) -v "$$PWD/$$m":/src -w /src golang:$(GO_VERSION) go test -race -coverprofile=coverage.out ./... || exit 1; done
 
 down:
 	$(COMPOSE) down --remove-orphans
