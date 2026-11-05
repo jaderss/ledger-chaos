@@ -1,513 +1,427 @@
 {
-  "mode": "correct",
-  "locking": "serializable",
-  "mustFail": [],
-  "ok": true,
-  "verdict": "correct passes every invariant",
-  "quiet": true,
-  "quietDetail": "0 unpublished outbox rows, projector lag 0",
-  "results": [
-    {
-      "id": "I1",
-      "rule": "sum of all postings per currency is zero",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I2",
-      "rule": "each account balance equals the sum of its postings",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I3",
-      "rule": "no account without overdraft goes below zero",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I4",
-      "rule": "an acknowledged transfer exists exactly once",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I5",
-      "rule": "a transfer refused with a definite error does not exist",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I6",
-      "rule": "a transfer with unknown outcome exists at most once",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I7",
-      "rule": "same key and body give the same answer, another body changes nothing",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I8",
-      "rule": "every posted transfer reaches the topic, and only those",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I9",
-      "rule": "projector balances equal the ledger's sums of postings",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I11",
-      "rule": "no transfer transaction ends in a deadlock",
-      "pass": true,
-      "violations": 0
-    }
-  ],
-  "stats": {
-    "seconds": 60.269,
-    "keys": 24560,
-    "attempts": 38729,
-    "ok": 24994,
-    "fail": 563,
-    "unknown": 13172,
-    "okPerSecond": 414.70739517828406,
-    "p50Ms": 55,
-    "p99Ms": 288,
-    "maxMs": 850,
-    "commits": 29721,
-    "rollbacks": 8743,
-    "timeline": [
-      {
-        "t": 0,
-        "ok": 314,
-        "fail": 1,
-        "unknown": 51
-      },
-      {
-        "t": 1,
-        "ok": 445,
-        "fail": 2,
-        "unknown": 68
-      },
-      {
-        "t": 2,
-        "ok": 499,
-        "fail": 2,
-        "unknown": 77
-      },
-      {
-        "t": 3,
-        "ok": 600,
-        "fail": 6,
-        "unknown": 84
-      },
-      {
-        "t": 4,
-        "ok": 704,
-        "fail": 7,
-        "unknown": 83
-      },
-      {
-        "t": 5,
-        "ok": 712,
-        "fail": 28,
-        "unknown": 70
-      },
-      {
-        "t": 6,
-        "ok": 763,
-        "fail": 33,
-        "unknown": 95
-      },
-      {
-        "t": 7,
-        "ok": 712,
-        "fail": 16,
-        "unknown": 78
-      },
-      {
-        "t": 8,
-        "ok": 18,
-        "fail": 0,
-        "unknown": 32
-      },
-      {
-        "t": 9,
-        "ok": 624,
-        "fail": 9,
-        "unknown": 90
-      },
-      {
-        "t": 10,
-        "ok": 760,
-        "fail": 21,
-        "unknown": 84
-      },
-      {
-        "t": 11,
-        "ok": 767,
-        "fail": 44,
-        "unknown": 95
-      },
-      {
-        "t": 12,
-        "ok": 803,
-        "fail": 31,
-        "unknown": 86
-      },
-      {
-        "t": 13,
-        "ok": 961,
-        "fail": 16,
-        "unknown": 109
-      },
-      {
-        "t": 14,
-        "ok": 992,
-        "fail": 9,
-        "unknown": 130
-      },
-      {
-        "t": 15,
-        "ok": 1011,
-        "fail": 17,
-        "unknown": 140
-      },
-      {
-        "t": 16,
-        "ok": 1006,
-        "fail": 9,
-        "unknown": 133
-      },
-      {
-        "t": 17,
-        "ok": 1255,
-        "fail": 43,
-        "unknown": 166
-      },
-      {
-        "t": 18,
-        "ok": 1387,
-        "fail": 26,
-        "unknown": 196
-      },
-      {
-        "t": 19,
-        "ok": 1053,
-        "fail": 25,
-        "unknown": 125
-      },
-      {
-        "t": 20,
-        "ok": 1071,
-        "fail": 40,
-        "unknown": 143
-      },
-      {
-        "t": 21,
-        "ok": 867,
-        "fail": 21,
-        "unknown": 106
-      },
-      {
-        "t": 22,
-        "ok": 1043,
-        "fail": 32,
-        "unknown": 120
-      },
-      {
-        "t": 23,
-        "ok": 606,
-        "fail": 19,
-        "unknown": 291
-      },
-      {
-        "t": 24,
-        "ok": 2,
-        "fail": 0,
-        "unknown": 67
-      },
-      {
-        "t": 25,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 40
-      },
-      {
-        "t": 26,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 49
-      },
-      {
-        "t": 27,
-        "ok": 199,
-        "fail": 0,
-        "unknown": 293
-      },
-      {
-        "t": 28,
-        "ok": 231,
-        "fail": 3,
-        "unknown": 421
-      },
-      {
-        "t": 29,
-        "ok": 198,
-        "fail": 2,
-        "unknown": 365
-      },
-      {
-        "t": 30,
-        "ok": 213,
-        "fail": 6,
-        "unknown": 337
-      },
-      {
-        "t": 31,
-        "ok": 218,
-        "fail": 3,
-        "unknown": 425
-      },
-      {
-        "t": 32,
-        "ok": 281,
-        "fail": 3,
-        "unknown": 535
-      },
-      {
-        "t": 33,
-        "ok": 289,
-        "fail": 10,
-        "unknown": 570
-      },
-      {
-        "t": 34,
-        "ok": 314,
-        "fail": 12,
-        "unknown": 381
-      },
-      {
-        "t": 35,
-        "ok": 319,
-        "fail": 4,
-        "unknown": 409
-      },
-      {
-        "t": 36,
-        "ok": 273,
-        "fail": 3,
-        "unknown": 460
-      },
-      {
-        "t": 37,
-        "ok": 280,
-        "fail": 13,
-        "unknown": 407
-      },
-      {
-        "t": 38,
-        "ok": 254,
-        "fail": 8,
-        "unknown": 376
-      },
-      {
-        "t": 39,
-        "ok": 249,
-        "fail": 0,
-        "unknown": 379
-      },
-      {
-        "t": 40,
-        "ok": 2,
-        "fail": 0,
-        "unknown": 64
-      },
-      {
-        "t": 41,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 37
-      },
-      {
-        "t": 42,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 50
-      },
-      {
-        "t": 43,
-        "ok": 170,
-        "fail": 5,
-        "unknown": 218
-      },
-      {
-        "t": 44,
-        "ok": 240,
-        "fail": 4,
-        "unknown": 405
-      },
-      {
-        "t": 45,
-        "ok": 222,
-        "fail": 2,
-        "unknown": 402
-      },
-      {
-        "t": 46,
-        "ok": 228,
-        "fail": 7,
-        "unknown": 430
-      },
-      {
-        "t": 47,
-        "ok": 213,
-        "fail": 2,
-        "unknown": 361
-      },
-      {
-        "t": 48,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 65
-      },
-      {
-        "t": 49,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 40
-      },
-      {
-        "t": 50,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 53
-      },
-      {
-        "t": 51,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 59
-      },
-      {
-        "t": 52,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 64
-      },
-      {
-        "t": 53,
-        "ok": 200,
-        "fail": 6,
-        "unknown": 249
-      },
-      {
-        "t": 54,
-        "ok": 251,
-        "fail": 0,
-        "unknown": 497
-      },
-      {
-        "t": 55,
-        "ok": 242,
-        "fail": 2,
-        "unknown": 473
-      },
-      {
-        "t": 56,
-        "ok": 3,
-        "fail": 0,
-        "unknown": 63
-      },
-      {
-        "t": 57,
-        "ok": 302,
-        "fail": 8,
-        "unknown": 284
-      },
-      {
-        "t": 58,
-        "ok": 286,
-        "fail": 2,
-        "unknown": 551
-      },
-      {
-        "t": 59,
-        "ok": 285,
-        "fail": 1,
-        "unknown": 521
-      },
-      {
-        "t": 60,
-        "ok": 57,
-        "fail": 0,
-        "unknown": 120
-      }
-    ],
-    "faults": [
-      {
-        "fault": "restart-db",
-        "start": 8.001,
-        "end": 11.181
-      },
-      {
-        "fault": "kill-projector",
-        "start": 16,
-        "end": 19.158
-      },
-      {
-        "fault": "pause-db",
-        "start": 24.001,
-        "end": 27.039
-      },
-      {
-        "fault": "kill-projector",
-        "start": 32.001,
-        "end": 35.201
-      },
-      {
-        "fault": "pause-db",
-        "start": 40.001,
-        "end": 43.033
-      },
-      {
-        "fault": "db-reset",
-        "start": 48.001,
-        "end": 51.003
-      },
-      {
-        "fault": "restart-db",
-        "start": 56,
-        "end": 59.208
-      }
-    ]
+  "mode" : "correct",
+  "locking" : "serializable",
+  "mustFail" : [ ],
+  "ok" : true,
+  "verdict" : "correct passes every invariant",
+  "quiet" : true,
+  "quietDetail" : "0 unpublished outbox rows, projector lag 0",
+  "results" : [ {
+    "id" : "I1",
+    "rule" : "sum of all postings per currency is zero",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I2",
+    "rule" : "each account balance equals the sum of its postings",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I3",
+    "rule" : "no account without overdraft goes below zero",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I4",
+    "rule" : "an acknowledged transfer exists exactly once",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I5",
+    "rule" : "a transfer refused with a definite error does not exist",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I6",
+    "rule" : "a transfer with unknown outcome exists at most once",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I7",
+    "rule" : "same key and body give the same answer, another body changes nothing",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I8",
+    "rule" : "every posted transfer reaches the topic, and only those",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I9",
+    "rule" : "projector balances equal the ledger's sums of postings",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I11",
+    "rule" : "no transfer transaction ends in a deadlock",
+    "pass" : true,
+    "violations" : 0
+  } ],
+  "stats" : {
+    "seconds" : 61.277,
+    "keys" : 23615,
+    "attempts" : 31929,
+    "ok" : 23748,
+    "fail" : 709,
+    "unknown" : 7472,
+    "okPerSecond" : 387.55160990257355,
+    "p50Ms" : 76,
+    "p99Ms" : 433,
+    "maxMs" : 955,
+    "commits" : 6004,
+    "rollbacks" : 11161,
+    "timeline" : [ {
+      "t" : 0,
+      "ok" : 150,
+      "fail" : 0,
+      "unknown" : 39
+    }, {
+      "t" : 1,
+      "ok" : 250,
+      "fail" : 2,
+      "unknown" : 40
+    }, {
+      "t" : 2,
+      "ok" : 284,
+      "fail" : 3,
+      "unknown" : 41
+    }, {
+      "t" : 3,
+      "ok" : 377,
+      "fail" : 7,
+      "unknown" : 55
+    }, {
+      "t" : 4,
+      "ok" : 397,
+      "fail" : 1,
+      "unknown" : 63
+    }, {
+      "t" : 5,
+      "ok" : 427,
+      "fail" : 4,
+      "unknown" : 67
+    }, {
+      "t" : 6,
+      "ok" : 430,
+      "fail" : 10,
+      "unknown" : 72
+    }, {
+      "t" : 7,
+      "ok" : 416,
+      "fail" : 12,
+      "unknown" : 61
+    }, {
+      "t" : 8,
+      "ok" : 621,
+      "fail" : 23,
+      "unknown" : 76
+    }, {
+      "t" : 9,
+      "ok" : 802,
+      "fail" : 13,
+      "unknown" : 119
+    }, {
+      "t" : 10,
+      "ok" : 718,
+      "fail" : 30,
+      "unknown" : 110
+    }, {
+      "t" : 11,
+      "ok" : 631,
+      "fail" : 24,
+      "unknown" : 82
+    }, {
+      "t" : 12,
+      "ok" : 512,
+      "fail" : 21,
+      "unknown" : 63
+    }, {
+      "t" : 13,
+      "ok" : 632,
+      "fail" : 9,
+      "unknown" : 103
+    }, {
+      "t" : 14,
+      "ok" : 689,
+      "fail" : 9,
+      "unknown" : 98
+    }, {
+      "t" : 15,
+      "ok" : 662,
+      "fail" : 11,
+      "unknown" : 90
+    }, {
+      "t" : 16,
+      "ok" : 598,
+      "fail" : 26,
+      "unknown" : 104
+    }, {
+      "t" : 17,
+      "ok" : 506,
+      "fail" : 20,
+      "unknown" : 85
+    }, {
+      "t" : 18,
+      "ok" : 501,
+      "fail" : 16,
+      "unknown" : 99
+    }, {
+      "t" : 19,
+      "ok" : 322,
+      "fail" : 15,
+      "unknown" : 74
+    }, {
+      "t" : 20,
+      "ok" : 265,
+      "fail" : 7,
+      "unknown" : 64
+    }, {
+      "t" : 21,
+      "ok" : 559,
+      "fail" : 27,
+      "unknown" : 84
+    }, {
+      "t" : 22,
+      "ok" : 481,
+      "fail" : 19,
+      "unknown" : 68
+    }, {
+      "t" : 23,
+      "ok" : 442,
+      "fail" : 8,
+      "unknown" : 85
+    }, {
+      "t" : 24,
+      "ok" : 5,
+      "fail" : 0,
+      "unknown" : 61
+    }, {
+      "t" : 25,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 43
+    }, {
+      "t" : 26,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 58
+    }, {
+      "t" : 27,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 59
+    }, {
+      "t" : 28,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 64
+    }, {
+      "t" : 29,
+      "ok" : 580,
+      "fail" : 6,
+      "unknown" : 92
+    }, {
+      "t" : 30,
+      "ok" : 671,
+      "fail" : 10,
+      "unknown" : 111
+    }, {
+      "t" : 31,
+      "ok" : 383,
+      "fail" : 10,
+      "unknown" : 83
+    }, {
+      "t" : 32,
+      "ok" : 3,
+      "fail" : 0,
+      "unknown" : 128
+    }, {
+      "t" : 33,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 64
+    }, {
+      "t" : 34,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 64
+    }, {
+      "t" : 35,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 985
+    }, {
+      "t" : 36,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 1307
+    }, {
+      "t" : 37,
+      "ok" : 52,
+      "fail" : 2,
+      "unknown" : 633
+    }, {
+      "t" : 38,
+      "ok" : 379,
+      "fail" : 4,
+      "unknown" : 45
+    }, {
+      "t" : 39,
+      "ok" : 549,
+      "fail" : 4,
+      "unknown" : 83
+    }, {
+      "t" : 40,
+      "ok" : 459,
+      "fail" : 9,
+      "unknown" : 67
+    }, {
+      "t" : 41,
+      "ok" : 518,
+      "fail" : 23,
+      "unknown" : 74
+    }, {
+      "t" : 42,
+      "ok" : 624,
+      "fail" : 18,
+      "unknown" : 100
+    }, {
+      "t" : 43,
+      "ok" : 609,
+      "fail" : 18,
+      "unknown" : 93
+    }, {
+      "t" : 44,
+      "ok" : 582,
+      "fail" : 16,
+      "unknown" : 90
+    }, {
+      "t" : 45,
+      "ok" : 570,
+      "fail" : 17,
+      "unknown" : 73
+    }, {
+      "t" : 46,
+      "ok" : 529,
+      "fail" : 10,
+      "unknown" : 61
+    }, {
+      "t" : 47,
+      "ok" : 566,
+      "fail" : 28,
+      "unknown" : 72
+    }, {
+      "t" : 48,
+      "ok" : 8,
+      "fail" : 0,
+      "unknown" : 57
+    }, {
+      "t" : 49,
+      "ok" : 410,
+      "fail" : 7,
+      "unknown" : 38
+    }, {
+      "t" : 50,
+      "ok" : 649,
+      "fail" : 22,
+      "unknown" : 85
+    }, {
+      "t" : 51,
+      "ok" : 680,
+      "fail" : 18,
+      "unknown" : 97
+    }, {
+      "t" : 52,
+      "ok" : 781,
+      "fail" : 43,
+      "unknown" : 124
+    }, {
+      "t" : 53,
+      "ok" : 884,
+      "fail" : 40,
+      "unknown" : 146
+    }, {
+      "t" : 54,
+      "ok" : 816,
+      "fail" : 49,
+      "unknown" : 116
+    }, {
+      "t" : 55,
+      "ok" : 729,
+      "fail" : 34,
+      "unknown" : 114
+    }, {
+      "t" : 56,
+      "ok" : 1,
+      "fail" : 0,
+      "unknown" : 65
+    }, {
+      "t" : 57,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 38
+    }, {
+      "t" : 58,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 56
+    }, {
+      "t" : 59,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 60
+    }, {
+      "t" : 60,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 64
+    }, {
+      "t" : 61,
+      "ok" : 39,
+      "fail" : 4,
+      "unknown" : 60
+    } ],
+    "faults" : [ {
+      "fault" : "kill-projector",
+      "start" : 8.0,
+      "end" : 11.225
+    }, {
+      "fault" : "kafka-down",
+      "start" : 16.0,
+      "end" : 19.228
+    }, {
+      "fault" : "db-reset",
+      "start" : 23.999,
+      "end" : 27.007
+    }, {
+      "fault" : "kill-ledger",
+      "start" : 31.999,
+      "end" : 35.214
+    }, {
+      "fault" : "kill-projector",
+      "start" : 39.999,
+      "end" : 43.277
+    }, {
+      "fault" : "restart-db",
+      "start" : 47.999,
+      "end" : 51.23
+    }, {
+      "fault" : "db-cut",
+      "start" : 55.999,
+      "end" : 59.014
+    } ]
   },
-  "run": {
-    "accounts": 20,
-    "amountMaxMinor": 5000,
-    "clientTimeout": "1s",
-    "duration": "1m0s",
-    "endedAt": "2026-11-05T17:34:20Z",
-    "faults": [
-      "kill-ledger",
-      "kill-relay",
-      "kill-projector",
-      "pause-db",
-      "restart-db",
-      "db-cut",
-      "db-latency",
-      "db-reset",
-      "kafka-down"
-    ],
-    "fundingMinor": 100000,
-    "scenario": "all",
-    "seed": 1793899999712033500,
-    "startedAt": "2026-11-05T17:33:19Z",
-    "workers": 64
+  "run" : {
+    "seed" : 1793911841180933048,
+    "scenario" : "all",
+    "faults" : [ "kill-ledger", "kill-relay", "kill-projector", "pause-db", "restart-db", "db-cut", "db-latency", "db-reset", "kafka-down" ],
+    "accounts" : 20,
+    "workers" : 64,
+    "duration" : "1m0s",
+    "clientTimeout" : "1s",
+    "fundingMinor" : 100000,
+    "amountMaxMinor" : 5000,
+    "startedAt" : "2026-11-05T20:50:41Z",
+    "endedAt" : "2026-11-05T20:51:43Z"
   }
 }

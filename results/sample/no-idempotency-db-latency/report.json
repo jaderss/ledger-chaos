@@ -1,527 +1,414 @@
 {
-  "mode": "no-idempotency",
-  "locking": "ordered",
-  "mustFail": [
-    "I4",
-    "I6",
-    "I7"
-  ],
-  "ok": true,
-  "verdict": "no-idempotency fails I4, I5, I6, I7, and must fail I4, I6, I7",
-  "quiet": true,
-  "quietDetail": "0 unpublished outbox rows, projector lag 0",
-  "results": [
-    {
-      "id": "I1",
-      "rule": "sum of all postings per currency is zero",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I2",
-      "rule": "each account balance equals the sum of its postings",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I3",
-      "rule": "no account without overdraft goes below zero",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I4",
-      "rule": "an acknowledged transfer exists exactly once",
-      "pass": false,
-      "violations": 2911,
-      "examples": [
-        "key 0017812b-cd67-48d6-ad2d-75114d242539 was acknowledged and has 2 posted transfers",
-        "key 004c405b-d5b3-4fa2-8aef-50461ca9103b was acknowledged and has 2 posted transfers",
-        "key 0062eeda-c851-4655-bf69-286754b34310 was acknowledged and has 2 posted transfers",
-        "key 00690343-4b48-41f0-8c23-fb7c306b86a6 was acknowledged and has 2 posted transfers",
-        "key 008fa1cc-5e64-4c49-97fc-65468ef5abc1 was acknowledged and has 2 posted transfers"
-      ]
-    },
-    {
-      "id": "I5",
-      "rule": "a transfer refused with a definite error does not exist",
-      "pass": false,
-      "violations": 6,
-      "examples": [
-        "key 1bcf1292-2433-4367-8171-72e504701bb5 was refused with 422 and has 1 posted transfers",
-        "key 4e0061d2-6b39-4e37-8b9a-675f2d8b5b96 was refused with 422 and has 1 posted transfers",
-        "key 77a150d2-f187-4027-8b9a-9ff9f65c0fa1 was refused with 422 and has 1 posted transfers",
-        "key 81327bd5-22db-4108-8c15-d6c5adc51f78 was refused with 422 and has 1 posted transfers",
-        "key 88954700-5676-4c67-a229-2e31f060040c was refused with 422 and has 1 posted transfers"
-      ]
-    },
-    {
-      "id": "I6",
-      "rule": "a transfer with unknown outcome exists at most once",
-      "pass": false,
-      "violations": 73,
-      "examples": [
-        "key 05695b53-9707-46d0-a38e-00ea63ea4c91 had only unknown outcomes and has 3 transfers",
-        "key 06594de1-cd94-488d-a1c3-6d4b43e40f8b had only unknown outcomes and has 2 transfers",
-        "key 12ab1d5f-5d66-466d-993c-f815a60821f2 had only unknown outcomes and has 2 transfers",
-        "key 16befd09-8801-4b00-8ce0-568db9242602 had only unknown outcomes and has 2 transfers",
-        "key 17d75983-6ca6-4326-8903-42dc0c28a791 had only unknown outcomes and has 2 transfers"
-      ]
-    },
-    {
-      "id": "I7",
-      "rule": "same key and body give the same answer, another body changes nothing",
-      "pass": false,
-      "violations": 3323,
-      "examples": [
-        "key 0017812b-cd67-48d6-ad2d-75114d242539 answered 90627b05-7d6f-47bb-b794-d1f4275a9064 POSTED, then 3ec02190-b8f2-4fac-a617-bf8fc985b200 POSTED",
-        "key 004c405b-d5b3-4fa2-8aef-50461ca9103b answered 0a38839b-a634-4865-b3b5-28ae1a1c1f9f POSTED, then 361db997-c849-4b8f-b440-7d2311b6ffca POSTED",
-        "key 0062eeda-c851-4655-bf69-286754b34310 answered 1f40f9e2-9e17-4239-9741-b63790156a5f POSTED, then 635c7566-f054-4358-9662-1967fb575c54 POSTED",
-        "key 008fa1cc-5e64-4c49-97fc-65468ef5abc1 answered 2c38aa79-5b84-436e-bfc5-33f05c467acf POSTED, then 53b30e7e-55fa-4923-9913-7a3d6862832e POSTED",
-        "key 00932b1d-04b0-4ea9-ae97-b78187540f33 answered 50585b79-2d12-4bbe-baf4-bfd045d3ff2e POSTED, then 2aac84d0-b102-48d9-b064-4a3112bf3fa8 POSTED"
-      ]
-    },
-    {
-      "id": "I8",
-      "rule": "every posted transfer reaches the topic, and only those",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I9",
-      "rule": "projector balances equal the ledger's sums of postings",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I11",
-      "rule": "no transfer transaction ends in a deadlock",
-      "pass": true,
-      "violations": 0
-    }
-  ],
-  "stats": {
-    "seconds": 60.041,
-    "keys": 46267,
-    "attempts": 50709,
-    "ok": 47921,
-    "fail": 917,
-    "unknown": 1871,
-    "okPerSecond": 798.1379390749655,
-    "p50Ms": 32,
-    "p99Ms": 163,
-    "maxMs": 861,
-    "commits": 97304,
-    "rollbacks": 60,
-    "timeline": [
-      {
-        "t": 0,
-        "ok": 552,
-        "fail": 0,
-        "unknown": 0
-      },
-      {
-        "t": 1,
-        "ok": 742,
-        "fail": 0,
-        "unknown": 0
-      },
-      {
-        "t": 2,
-        "ok": 1163,
-        "fail": 5,
-        "unknown": 0
-      },
-      {
-        "t": 3,
-        "ok": 1115,
-        "fail": 12,
-        "unknown": 0
-      },
-      {
-        "t": 4,
-        "ok": 1438,
-        "fail": 2,
-        "unknown": 0
-      },
-      {
-        "t": 5,
-        "ok": 1248,
-        "fail": 17,
-        "unknown": 0
-      },
-      {
-        "t": 6,
-        "ok": 1373,
-        "fail": 27,
-        "unknown": 0
-      },
-      {
-        "t": 7,
-        "ok": 1455,
-        "fail": 20,
-        "unknown": 0
-      },
-      {
-        "t": 8,
-        "ok": 1567,
-        "fail": 30,
-        "unknown": 0
-      },
-      {
-        "t": 9,
-        "ok": 1802,
-        "fail": 19,
-        "unknown": 0
-      },
-      {
-        "t": 10,
-        "ok": 1706,
-        "fail": 6,
-        "unknown": 0
-      },
-      {
-        "t": 11,
-        "ok": 1680,
-        "fail": 9,
-        "unknown": 0
-      },
-      {
-        "t": 12,
-        "ok": 3,
-        "fail": 0,
-        "unknown": 62
-      },
-      {
-        "t": 13,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 5
-      },
-      {
-        "t": 14,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 64
-      },
-      {
-        "t": 15,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 64
-      },
-      {
-        "t": 16,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 65
-      },
-      {
-        "t": 17,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 65
-      },
-      {
-        "t": 18,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 65
-      },
-      {
-        "t": 19,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 70
-      },
-      {
-        "t": 20,
-        "ok": 1530,
-        "fail": 32,
-        "unknown": 0
-      },
-      {
-        "t": 21,
-        "ok": 1987,
-        "fail": 40,
-        "unknown": 0
-      },
-      {
-        "t": 22,
-        "ok": 1853,
-        "fail": 56,
-        "unknown": 0
-      },
-      {
-        "t": 23,
-        "ok": 1712,
-        "fail": 59,
-        "unknown": 0
-      },
-      {
-        "t": 24,
-        "ok": 4,
-        "fail": 0,
-        "unknown": 62
-      },
-      {
-        "t": 25,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 11
-      },
-      {
-        "t": 26,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 61
-      },
-      {
-        "t": 27,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 67
-      },
-      {
-        "t": 28,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 67
-      },
-      {
-        "t": 29,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 67
-      },
-      {
-        "t": 30,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 67
-      },
-      {
-        "t": 31,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 67
-      },
-      {
-        "t": 32,
-        "ok": 1875,
-        "fail": 49,
-        "unknown": 0
-      },
-      {
-        "t": 33,
-        "ok": 2000,
-        "fail": 58,
-        "unknown": 0
-      },
-      {
-        "t": 34,
-        "ok": 2203,
-        "fail": 30,
-        "unknown": 0
-      },
-      {
-        "t": 35,
-        "ok": 1992,
-        "fail": 74,
-        "unknown": 0
-      },
-      {
-        "t": 36,
-        "ok": 4,
-        "fail": 0,
-        "unknown": 60
-      },
-      {
-        "t": 37,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 11
-      },
-      {
-        "t": 38,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 61
-      },
-      {
-        "t": 39,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 66
-      },
-      {
-        "t": 40,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 66
-      },
-      {
-        "t": 41,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 66
-      },
-      {
-        "t": 42,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 66
-      },
-      {
-        "t": 43,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 65
-      },
-      {
-        "t": 44,
-        "ok": 2094,
-        "fail": 87,
-        "unknown": 0
-      },
-      {
-        "t": 45,
-        "ok": 2354,
-        "fail": 44,
-        "unknown": 0
-      },
-      {
-        "t": 46,
-        "ok": 2275,
-        "fail": 39,
-        "unknown": 0
-      },
-      {
-        "t": 47,
-        "ok": 1956,
-        "fail": 54,
-        "unknown": 0
-      },
-      {
-        "t": 48,
-        "ok": 4,
-        "fail": 0,
-        "unknown": 57
-      },
-      {
-        "t": 49,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 13
-      },
-      {
-        "t": 50,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 68
-      },
-      {
-        "t": 51,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 69
-      },
-      {
-        "t": 52,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 69
-      },
-      {
-        "t": 53,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 69
-      },
-      {
-        "t": 54,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 69
-      },
-      {
-        "t": 55,
-        "ok": 0,
-        "fail": 0,
-        "unknown": 67
-      },
-      {
-        "t": 56,
-        "ok": 1817,
-        "fail": 40,
-        "unknown": 0
-      },
-      {
-        "t": 57,
-        "ok": 2210,
-        "fail": 67,
-        "unknown": 0
-      },
-      {
-        "t": 58,
-        "ok": 2158,
-        "fail": 22,
-        "unknown": 0
-      },
-      {
-        "t": 59,
-        "ok": 1980,
-        "fail": 19,
-        "unknown": 0
-      },
-      {
-        "t": 60,
-        "ok": 69,
-        "fail": 0,
-        "unknown": 0
-      }
-    ],
-    "faults": [
-      {
-        "fault": "db-latency",
-        "start": 12,
-        "end": 20.004
-      },
-      {
-        "fault": "db-latency",
-        "start": 24.001,
-        "end": 32.003
-      },
-      {
-        "fault": "db-latency",
-        "start": 36.001,
-        "end": 44.003
-      },
-      {
-        "fault": "db-latency",
-        "start": 48.001,
-        "end": 56.003
-      },
-      {
-        "fault": "db-latency",
-        "start": 60.001,
-        "end": 60.001
-      }
-    ]
+  "mode" : "no-idempotency",
+  "locking" : "ordered",
+  "mustFail" : [ "I4", "I6", "I7" ],
+  "ok" : true,
+  "verdict" : "no-idempotency fails I4, I5, I6, I7, and must fail I4, I6, I7",
+  "quiet" : true,
+  "quietDetail" : "0 unpublished outbox rows, projector lag 0",
+  "results" : [ {
+    "id" : "I1",
+    "rule" : "sum of all postings per currency is zero",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I2",
+    "rule" : "each account balance equals the sum of its postings",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I3",
+    "rule" : "no account without overdraft goes below zero",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I4",
+    "rule" : "an acknowledged transfer exists exactly once",
+    "pass" : false,
+    "violations" : 1857,
+    "examples" : [ "key 003957a8-dcfa-410a-86bf-cb4caaf6e601 was acknowledged and has 2 posted transfers", "key 0053ac01-3cd2-4fc6-9c54-85fad66374e9 was acknowledged and has 2 posted transfers", "key 00590e3e-3369-4c19-98a0-440617312dfe was acknowledged and has 2 posted transfers", "key 005e02fb-e78d-4ab6-a6d6-1e9c2f320b55 was acknowledged and has 2 posted transfers", "key 00678561-4062-4140-bde8-08ddf1816a5f was acknowledged and has 2 posted transfers" ]
+  }, {
+    "id" : "I5",
+    "rule" : "a transfer refused with a definite error does not exist",
+    "pass" : false,
+    "violations" : 6,
+    "examples" : [ "key 0ab4664e-d48e-4125-bafc-7a49c56f3932 was refused with 422 and has 1 posted transfers", "key 2b2263f7-9918-426b-9c88-6078436effe3 was refused with 422 and has 1 posted transfers", "key 6fc77eec-1d2d-458b-bee7-a9d5d659da1c was refused with 422 and has 2 posted transfers", "key adb29bdc-09ce-499f-bf7d-db2bdc9aa901 was refused with 422 and has 1 posted transfers", "key b0137a84-7999-4f11-b612-85743ed30baf was refused with 422 and has 1 posted transfers" ]
+  }, {
+    "id" : "I6",
+    "rule" : "a transfer with unknown outcome exists at most once",
+    "pass" : false,
+    "violations" : 49,
+    "examples" : [ "key 013129e6-2e5e-45f7-b04f-540c8be8f907 had only unknown outcomes and has 2 transfers", "key 02d3ca6d-747e-422e-94db-c574717275ff had only unknown outcomes and has 2 transfers", "key 08b8c4a1-6b88-4700-ac46-56dccded595c had only unknown outcomes and has 2 transfers", "key 0bca4733-b166-4fa5-bea1-3f4495e20066 had only unknown outcomes and has 2 transfers", "key 173c086d-c84c-4459-92b8-2c0d475a91e4 had only unknown outcomes and has 2 transfers" ]
+  }, {
+    "id" : "I7",
+    "rule" : "same key and body give the same answer, another body changes nothing",
+    "pass" : false,
+    "violations" : 1991,
+    "examples" : [ "key 003957a8-dcfa-410a-86bf-cb4caaf6e601 answered f2f7dcf1-7aa6-4d96-85d0-a96ef85206e1 POSTED, then 9b179d7f-b2dc-41e4-b751-03d311d441c4 POSTED", "key 0053ac01-3cd2-4fc6-9c54-85fad66374e9 answered e01c3603-b781-4c96-863c-c30102e1ace0 POSTED, then 70477057-2758-4e95-a307-412062168beb POSTED", "key 00590e3e-3369-4c19-98a0-440617312dfe answered 18a117a1-92a7-410b-b7df-0a88d68bdf99 POSTED, then 61ede0e7-1657-43da-9d6f-2191769dfe57 POSTED", "key 005e02fb-e78d-4ab6-a6d6-1e9c2f320b55 reused with another body answered 201 null", "key 005e02fb-e78d-4ab6-a6d6-1e9c2f320b55 reused with another body created transfer 4134ca42-9199-4881-93aa-7ccc8392561e" ]
+  }, {
+    "id" : "I8",
+    "rule" : "every posted transfer reaches the topic, and only those",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I9",
+    "rule" : "projector balances equal the ledger's sums of postings",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I11",
+    "rule" : "no transfer transaction ends in a deadlock",
+    "pass" : true,
+    "violations" : 0
+  } ],
+  "stats" : {
+    "seconds" : 60.025,
+    "keys" : 28894,
+    "attempts" : 32277,
+    "ok" : 29726,
+    "fail" : 631,
+    "unknown" : 1920,
+    "okPerSecond" : 495.2269887546856,
+    "p50Ms" : 50,
+    "p99Ms" : 319,
+    "maxMs" : 1022,
+    "commits" : 30215,
+    "rollbacks" : 112,
+    "timeline" : [ {
+      "t" : 0,
+      "ok" : 326,
+      "fail" : 0,
+      "unknown" : 0
+    }, {
+      "t" : 1,
+      "ok" : 421,
+      "fail" : 0,
+      "unknown" : 0
+    }, {
+      "t" : 2,
+      "ok" : 550,
+      "fail" : 0,
+      "unknown" : 0
+    }, {
+      "t" : 3,
+      "ok" : 687,
+      "fail" : 0,
+      "unknown" : 0
+    }, {
+      "t" : 4,
+      "ok" : 689,
+      "fail" : 2,
+      "unknown" : 0
+    }, {
+      "t" : 5,
+      "ok" : 731,
+      "fail" : 7,
+      "unknown" : 0
+    }, {
+      "t" : 6,
+      "ok" : 706,
+      "fail" : 10,
+      "unknown" : 0
+    }, {
+      "t" : 7,
+      "ok" : 862,
+      "fail" : 26,
+      "unknown" : 0
+    }, {
+      "t" : 8,
+      "ok" : 777,
+      "fail" : 19,
+      "unknown" : 0
+    }, {
+      "t" : 9,
+      "ok" : 1045,
+      "fail" : 20,
+      "unknown" : 0
+    }, {
+      "t" : 10,
+      "ok" : 1056,
+      "fail" : 28,
+      "unknown" : 0
+    }, {
+      "t" : 11,
+      "ok" : 1088,
+      "fail" : 20,
+      "unknown" : 0
+    }, {
+      "t" : 12,
+      "ok" : 11,
+      "fail" : 0,
+      "unknown" : 59
+    }, {
+      "t" : 13,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 35
+    }, {
+      "t" : 14,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 44
+    }, {
+      "t" : 15,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 16,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 17,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 18,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 19,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 68
+    }, {
+      "t" : 20,
+      "ok" : 695,
+      "fail" : 23,
+      "unknown" : 8
+    }, {
+      "t" : 21,
+      "ok" : 1057,
+      "fail" : 29,
+      "unknown" : 0
+    }, {
+      "t" : 22,
+      "ok" : 1141,
+      "fail" : 22,
+      "unknown" : 0
+    }, {
+      "t" : 23,
+      "ok" : 1456,
+      "fail" : 61,
+      "unknown" : 0
+    }, {
+      "t" : 24,
+      "ok" : 4,
+      "fail" : 0,
+      "unknown" : 65
+    }, {
+      "t" : 25,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 19
+    }, {
+      "t" : 26,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 56
+    }, {
+      "t" : 27,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 70
+    }, {
+      "t" : 28,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 70
+    }, {
+      "t" : 29,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 70
+    }, {
+      "t" : 30,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 70
+    }, {
+      "t" : 31,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 67
+    }, {
+      "t" : 32,
+      "ok" : 875,
+      "fail" : 10,
+      "unknown" : 0
+    }, {
+      "t" : 33,
+      "ok" : 1275,
+      "fail" : 9,
+      "unknown" : 0
+    }, {
+      "t" : 34,
+      "ok" : 1353,
+      "fail" : 72,
+      "unknown" : 0
+    }, {
+      "t" : 35,
+      "ok" : 1491,
+      "fail" : 36,
+      "unknown" : 0
+    }, {
+      "t" : 36,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 37,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 11
+    }, {
+      "t" : 38,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 58
+    }, {
+      "t" : 39,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 40,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 41,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 42,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 69
+    }, {
+      "t" : 43,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 65
+    }, {
+      "t" : 44,
+      "ok" : 1255,
+      "fail" : 40,
+      "unknown" : 0
+    }, {
+      "t" : 45,
+      "ok" : 1247,
+      "fail" : 54,
+      "unknown" : 0
+    }, {
+      "t" : 46,
+      "ok" : 1450,
+      "fail" : 28,
+      "unknown" : 0
+    }, {
+      "t" : 47,
+      "ok" : 1536,
+      "fail" : 20,
+      "unknown" : 0
+    }, {
+      "t" : 48,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 66
+    }, {
+      "t" : 49,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 5
+    }, {
+      "t" : 50,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 61
+    }, {
+      "t" : 51,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 66
+    }, {
+      "t" : 52,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 66
+    }, {
+      "t" : 53,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 66
+    }, {
+      "t" : 54,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 66
+    }, {
+      "t" : 55,
+      "ok" : 0,
+      "fail" : 0,
+      "unknown" : 68
+    }, {
+      "t" : 56,
+      "ok" : 1373,
+      "fail" : 29,
+      "unknown" : 0
+    }, {
+      "t" : 57,
+      "ok" : 1548,
+      "fail" : 15,
+      "unknown" : 0
+    }, {
+      "t" : 58,
+      "ok" : 1342,
+      "fail" : 18,
+      "unknown" : 0
+    }, {
+      "t" : 59,
+      "ok" : 1626,
+      "fail" : 33,
+      "unknown" : 0
+    }, {
+      "t" : 60,
+      "ok" : 53,
+      "fail" : 0,
+      "unknown" : 0
+    } ],
+    "faults" : [ {
+      "fault" : "db-latency",
+      "start" : 11.998,
+      "end" : 20.023
+    }, {
+      "fault" : "db-latency",
+      "start" : 23.999,
+      "end" : 32.008
+    }, {
+      "fault" : "db-latency",
+      "start" : 35.998,
+      "end" : 44.01
+    }, {
+      "fault" : "db-latency",
+      "start" : 47.998,
+      "end" : 56.003
+    } ]
   },
-  "run": {
-    "accounts": 20,
-    "amountMaxMinor": 5000,
-    "clientTimeout": "1s",
-    "duration": "1m0s",
-    "endedAt": "2026-11-05T17:37:03Z",
-    "faults": [
-      "db-latency"
-    ],
-    "fundingMinor": 100000,
-    "scenario": "db-latency",
-    "seed": 1793900163142090500,
-    "startedAt": "2026-11-05T17:36:03Z",
-    "workers": 64
+  "run" : {
+    "seed" : 1793912034662389763,
+    "scenario" : "db-latency",
+    "faults" : [ "db-latency" ],
+    "accounts" : 20,
+    "workers" : 64,
+    "duration" : "1m0s",
+    "clientTimeout" : "1s",
+    "fundingMinor" : 100000,
+    "amountMaxMinor" : 5000,
+    "startedAt" : "2026-11-05T20:53:55Z",
+    "endedAt" : "2026-11-05T20:54:55Z"
   }
 }

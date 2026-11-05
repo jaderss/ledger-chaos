@@ -1,467 +1,994 @@
 {
-  "mode": "correct",
-  "locking": "serializable",
-  "mustFail": [],
-  "ok": true,
-  "verdict": "correct passes every invariant",
-  "quiet": true,
-  "quietDetail": "0 unpublished outbox rows, projector lag 0",
-  "results": [
-    {
-      "id": "I1",
-      "rule": "sum of all postings per currency is zero",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I2",
-      "rule": "each account balance equals the sum of its postings",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I3",
-      "rule": "no account without overdraft goes below zero",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I4",
-      "rule": "an acknowledged transfer exists exactly once",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I5",
-      "rule": "a transfer refused with a definite error does not exist",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I6",
-      "rule": "a transfer with unknown outcome exists at most once",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I7",
-      "rule": "same key and body give the same answer, another body changes nothing",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I8",
-      "rule": "every posted transfer reaches the topic, and only those",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I9",
-      "rule": "projector balances equal the ledger's sums of postings",
-      "pass": true,
-      "violations": 0
-    },
-    {
-      "id": "I11",
-      "rule": "no transfer transaction ends in a deadlock",
-      "pass": true,
-      "violations": 0
-    }
-  ],
-  "stats": {
-    "seconds": 60.054,
-    "keys": 55715,
-    "attempts": 66380,
-    "ok": 57440,
-    "fail": 1597,
-    "unknown": 7343,
-    "okPerSecond": 956.4725080760649,
-    "p50Ms": 47,
-    "p99Ms": 195,
-    "maxMs": 658,
-    "commits": 597033,
-    "rollbacks": 121093,
-    "timeline": [
-      {
-        "t": 0,
-        "ok": 313,
-        "fail": 2,
-        "unknown": 56
-      },
-      {
-        "t": 1,
-        "ok": 502,
-        "fail": 5,
-        "unknown": 53
-      },
-      {
-        "t": 2,
-        "ok": 561,
-        "fail": 9,
-        "unknown": 78
-      },
-      {
-        "t": 3,
-        "ok": 596,
-        "fail": 6,
-        "unknown": 77
-      },
-      {
-        "t": 4,
-        "ok": 620,
-        "fail": 9,
-        "unknown": 79
-      },
-      {
-        "t": 5,
-        "ok": 697,
-        "fail": 11,
-        "unknown": 84
-      },
-      {
-        "t": 6,
-        "ok": 801,
-        "fail": 18,
-        "unknown": 101
-      },
-      {
-        "t": 7,
-        "ok": 789,
-        "fail": 14,
-        "unknown": 101
-      },
-      {
-        "t": 8,
-        "ok": 891,
-        "fail": 9,
-        "unknown": 97
-      },
-      {
-        "t": 9,
-        "ok": 733,
-        "fail": 20,
-        "unknown": 77
-      },
-      {
-        "t": 10,
-        "ok": 773,
-        "fail": 7,
-        "unknown": 107
-      },
-      {
-        "t": 11,
-        "ok": 855,
-        "fail": 13,
-        "unknown": 114
-      },
-      {
-        "t": 12,
-        "ok": 940,
-        "fail": 21,
-        "unknown": 105
-      },
-      {
-        "t": 13,
-        "ok": 844,
-        "fail": 27,
-        "unknown": 108
-      },
-      {
-        "t": 14,
-        "ok": 876,
-        "fail": 24,
-        "unknown": 120
-      },
-      {
-        "t": 15,
-        "ok": 1057,
-        "fail": 24,
-        "unknown": 133
-      },
-      {
-        "t": 16,
-        "ok": 1063,
-        "fail": 28,
-        "unknown": 144
-      },
-      {
-        "t": 17,
-        "ok": 1059,
-        "fail": 22,
-        "unknown": 127
-      },
-      {
-        "t": 18,
-        "ok": 881,
-        "fail": 25,
-        "unknown": 110
-      },
-      {
-        "t": 19,
-        "ok": 1046,
-        "fail": 9,
-        "unknown": 124
-      },
-      {
-        "t": 20,
-        "ok": 1054,
-        "fail": 29,
-        "unknown": 135
-      },
-      {
-        "t": 21,
-        "ok": 1038,
-        "fail": 10,
-        "unknown": 129
-      },
-      {
-        "t": 22,
-        "ok": 960,
-        "fail": 27,
-        "unknown": 124
-      },
-      {
-        "t": 23,
-        "ok": 889,
-        "fail": 23,
-        "unknown": 117
-      },
-      {
-        "t": 24,
-        "ok": 1114,
-        "fail": 32,
-        "unknown": 131
-      },
-      {
-        "t": 25,
-        "ok": 1091,
-        "fail": 29,
-        "unknown": 158
-      },
-      {
-        "t": 26,
-        "ok": 1125,
-        "fail": 9,
-        "unknown": 153
-      },
-      {
-        "t": 27,
-        "ok": 902,
-        "fail": 32,
-        "unknown": 116
-      },
-      {
-        "t": 28,
-        "ok": 952,
-        "fail": 21,
-        "unknown": 109
-      },
-      {
-        "t": 29,
-        "ok": 1114,
-        "fail": 34,
-        "unknown": 152
-      },
-      {
-        "t": 30,
-        "ok": 1058,
-        "fail": 29,
-        "unknown": 139
-      },
-      {
-        "t": 31,
-        "ok": 1098,
-        "fail": 18,
-        "unknown": 136
-      },
-      {
-        "t": 32,
-        "ok": 903,
-        "fail": 21,
-        "unknown": 105
-      },
-      {
-        "t": 33,
-        "ok": 1022,
-        "fail": 29,
-        "unknown": 117
-      },
-      {
-        "t": 34,
-        "ok": 1138,
-        "fail": 45,
-        "unknown": 125
-      },
-      {
-        "t": 35,
-        "ok": 1013,
-        "fail": 65,
-        "unknown": 132
-      },
-      {
-        "t": 36,
-        "ok": 1012,
-        "fail": 19,
-        "unknown": 124
-      },
-      {
-        "t": 37,
-        "ok": 932,
-        "fail": 34,
-        "unknown": 113
-      },
-      {
-        "t": 38,
-        "ok": 1048,
-        "fail": 22,
-        "unknown": 139
-      },
-      {
-        "t": 39,
-        "ok": 1137,
-        "fail": 18,
-        "unknown": 155
-      },
-      {
-        "t": 40,
-        "ok": 1121,
-        "fail": 17,
-        "unknown": 160
-      },
-      {
-        "t": 41,
-        "ok": 992,
-        "fail": 12,
-        "unknown": 128
-      },
-      {
-        "t": 42,
-        "ok": 1006,
-        "fail": 35,
-        "unknown": 116
-      },
-      {
-        "t": 43,
-        "ok": 1084,
-        "fail": 40,
-        "unknown": 143
-      },
-      {
-        "t": 44,
-        "ok": 1090,
-        "fail": 29,
-        "unknown": 142
-      },
-      {
-        "t": 45,
-        "ok": 1077,
-        "fail": 29,
-        "unknown": 134
-      },
-      {
-        "t": 46,
-        "ok": 906,
-        "fail": 12,
-        "unknown": 130
-      },
-      {
-        "t": 47,
-        "ok": 1099,
-        "fail": 30,
-        "unknown": 139
-      },
-      {
-        "t": 48,
-        "ok": 1117,
-        "fail": 60,
-        "unknown": 144
-      },
-      {
-        "t": 49,
-        "ok": 1032,
-        "fail": 33,
-        "unknown": 138
-      },
-      {
-        "t": 50,
-        "ok": 998,
-        "fail": 44,
-        "unknown": 125
-      },
-      {
-        "t": 51,
-        "ok": 939,
-        "fail": 26,
-        "unknown": 124
-      },
-      {
-        "t": 52,
-        "ok": 1136,
-        "fail": 33,
-        "unknown": 154
-      },
-      {
-        "t": 53,
-        "ok": 1088,
-        "fail": 52,
-        "unknown": 142
-      },
-      {
-        "t": 54,
-        "ok": 1081,
-        "fail": 35,
-        "unknown": 166
-      },
-      {
-        "t": 55,
-        "ok": 891,
-        "fail": 50,
-        "unknown": 115
-      },
-      {
-        "t": 56,
-        "ok": 933,
-        "fail": 23,
-        "unknown": 120
-      },
-      {
-        "t": 57,
-        "ok": 1140,
-        "fail": 87,
-        "unknown": 135
-      },
-      {
-        "t": 58,
-        "ok": 1092,
-        "fail": 69,
-        "unknown": 149
-      },
-      {
-        "t": 59,
-        "ok": 1058,
-        "fail": 30,
-        "unknown": 127
-      },
-      {
-        "t": 60,
-        "ok": 63,
-        "fail": 2,
-        "unknown": 8
-      }
-    ],
-    "faults": null
+  "mode" : "correct",
+  "locking" : "serializable",
+  "mustFail" : [ ],
+  "ok" : true,
+  "verdict" : "correct passes every invariant",
+  "quiet" : true,
+  "quietDetail" : "0 unpublished outbox rows, projector lag 0",
+  "results" : [ {
+    "id" : "I1",
+    "rule" : "sum of all postings per currency is zero",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I2",
+    "rule" : "each account balance equals the sum of its postings",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I3",
+    "rule" : "no account without overdraft goes below zero",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I4",
+    "rule" : "an acknowledged transfer exists exactly once",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I5",
+    "rule" : "a transfer refused with a definite error does not exist",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I6",
+    "rule" : "a transfer with unknown outcome exists at most once",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I7",
+    "rule" : "same key and body give the same answer, another body changes nothing",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I8",
+    "rule" : "every posted transfer reaches the topic, and only those",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I9",
+    "rule" : "projector balances equal the ledger's sums of postings",
+    "pass" : true,
+    "violations" : 0
+  }, {
+    "id" : "I11",
+    "rule" : "no transfer transaction ends in a deadlock",
+    "pass" : true,
+    "violations" : 0
+  } ],
+  "stats" : {
+    "seconds" : 180.058,
+    "keys" : 187651,
+    "attempts" : 229262,
+    "ok" : 194173,
+    "fail" : 4679,
+    "unknown" : 30410,
+    "okPerSecond" : 1078.3914072132313,
+    "p50Ms" : 42,
+    "p99Ms" : 163,
+    "maxMs" : 696,
+    "commits" : 201796,
+    "rollbacks" : 465560,
+    "timeline" : [ {
+      "t" : 0,
+      "ok" : 282,
+      "fail" : 2,
+      "unknown" : 54
+    }, {
+      "t" : 1,
+      "ok" : 459,
+      "fail" : 3,
+      "unknown" : 67
+    }, {
+      "t" : 2,
+      "ok" : 628,
+      "fail" : 5,
+      "unknown" : 101
+    }, {
+      "t" : 3,
+      "ok" : 507,
+      "fail" : 10,
+      "unknown" : 90
+    }, {
+      "t" : 4,
+      "ok" : 574,
+      "fail" : 6,
+      "unknown" : 90
+    }, {
+      "t" : 5,
+      "ok" : 709,
+      "fail" : 20,
+      "unknown" : 116
+    }, {
+      "t" : 6,
+      "ok" : 796,
+      "fail" : 45,
+      "unknown" : 127
+    }, {
+      "t" : 7,
+      "ok" : 798,
+      "fail" : 13,
+      "unknown" : 122
+    }, {
+      "t" : 8,
+      "ok" : 722,
+      "fail" : 14,
+      "unknown" : 110
+    }, {
+      "t" : 9,
+      "ok" : 701,
+      "fail" : 18,
+      "unknown" : 102
+    }, {
+      "t" : 10,
+      "ok" : 818,
+      "fail" : 30,
+      "unknown" : 145
+    }, {
+      "t" : 11,
+      "ok" : 893,
+      "fail" : 28,
+      "unknown" : 134
+    }, {
+      "t" : 12,
+      "ok" : 984,
+      "fail" : 26,
+      "unknown" : 171
+    }, {
+      "t" : 13,
+      "ok" : 923,
+      "fail" : 53,
+      "unknown" : 136
+    }, {
+      "t" : 14,
+      "ok" : 999,
+      "fail" : 17,
+      "unknown" : 166
+    }, {
+      "t" : 15,
+      "ok" : 1050,
+      "fail" : 28,
+      "unknown" : 175
+    }, {
+      "t" : 16,
+      "ok" : 1111,
+      "fail" : 23,
+      "unknown" : 172
+    }, {
+      "t" : 17,
+      "ok" : 1125,
+      "fail" : 33,
+      "unknown" : 157
+    }, {
+      "t" : 18,
+      "ok" : 977,
+      "fail" : 15,
+      "unknown" : 146
+    }, {
+      "t" : 19,
+      "ok" : 1140,
+      "fail" : 45,
+      "unknown" : 172
+    }, {
+      "t" : 20,
+      "ok" : 1143,
+      "fail" : 15,
+      "unknown" : 178
+    }, {
+      "t" : 21,
+      "ok" : 1202,
+      "fail" : 14,
+      "unknown" : 179
+    }, {
+      "t" : 22,
+      "ok" : 1053,
+      "fail" : 24,
+      "unknown" : 172
+    }, {
+      "t" : 23,
+      "ok" : 1025,
+      "fail" : 39,
+      "unknown" : 151
+    }, {
+      "t" : 24,
+      "ok" : 1110,
+      "fail" : 26,
+      "unknown" : 182
+    }, {
+      "t" : 25,
+      "ok" : 1253,
+      "fail" : 45,
+      "unknown" : 190
+    }, {
+      "t" : 26,
+      "ok" : 1176,
+      "fail" : 36,
+      "unknown" : 181
+    }, {
+      "t" : 27,
+      "ok" : 980,
+      "fail" : 21,
+      "unknown" : 148
+    }, {
+      "t" : 28,
+      "ok" : 1163,
+      "fail" : 40,
+      "unknown" : 177
+    }, {
+      "t" : 29,
+      "ok" : 1171,
+      "fail" : 17,
+      "unknown" : 204
+    }, {
+      "t" : 30,
+      "ok" : 1171,
+      "fail" : 32,
+      "unknown" : 169
+    }, {
+      "t" : 31,
+      "ok" : 1163,
+      "fail" : 22,
+      "unknown" : 198
+    }, {
+      "t" : 32,
+      "ok" : 978,
+      "fail" : 26,
+      "unknown" : 150
+    }, {
+      "t" : 33,
+      "ok" : 1241,
+      "fail" : 18,
+      "unknown" : 198
+    }, {
+      "t" : 34,
+      "ok" : 1154,
+      "fail" : 26,
+      "unknown" : 174
+    }, {
+      "t" : 35,
+      "ok" : 1158,
+      "fail" : 20,
+      "unknown" : 180
+    }, {
+      "t" : 36,
+      "ok" : 1010,
+      "fail" : 22,
+      "unknown" : 148
+    }, {
+      "t" : 37,
+      "ok" : 1064,
+      "fail" : 11,
+      "unknown" : 165
+    }, {
+      "t" : 38,
+      "ok" : 1275,
+      "fail" : 22,
+      "unknown" : 199
+    }, {
+      "t" : 39,
+      "ok" : 1255,
+      "fail" : 16,
+      "unknown" : 200
+    }, {
+      "t" : 40,
+      "ok" : 1196,
+      "fail" : 11,
+      "unknown" : 196
+    }, {
+      "t" : 41,
+      "ok" : 988,
+      "fail" : 25,
+      "unknown" : 135
+    }, {
+      "t" : 42,
+      "ok" : 1219,
+      "fail" : 12,
+      "unknown" : 198
+    }, {
+      "t" : 43,
+      "ok" : 1185,
+      "fail" : 33,
+      "unknown" : 188
+    }, {
+      "t" : 44,
+      "ok" : 1229,
+      "fail" : 30,
+      "unknown" : 190
+    }, {
+      "t" : 45,
+      "ok" : 1133,
+      "fail" : 28,
+      "unknown" : 164
+    }, {
+      "t" : 46,
+      "ok" : 1013,
+      "fail" : 7,
+      "unknown" : 143
+    }, {
+      "t" : 47,
+      "ok" : 1222,
+      "fail" : 43,
+      "unknown" : 201
+    }, {
+      "t" : 48,
+      "ok" : 1173,
+      "fail" : 15,
+      "unknown" : 174
+    }, {
+      "t" : 49,
+      "ok" : 1246,
+      "fail" : 23,
+      "unknown" : 173
+    }, {
+      "t" : 50,
+      "ok" : 1025,
+      "fail" : 55,
+      "unknown" : 162
+    }, {
+      "t" : 51,
+      "ok" : 1084,
+      "fail" : 64,
+      "unknown" : 169
+    }, {
+      "t" : 52,
+      "ok" : 1184,
+      "fail" : 28,
+      "unknown" : 192
+    }, {
+      "t" : 53,
+      "ok" : 1207,
+      "fail" : 15,
+      "unknown" : 176
+    }, {
+      "t" : 54,
+      "ok" : 1140,
+      "fail" : 37,
+      "unknown" : 179
+    }, {
+      "t" : 55,
+      "ok" : 945,
+      "fail" : 27,
+      "unknown" : 142
+    }, {
+      "t" : 56,
+      "ok" : 1133,
+      "fail" : 55,
+      "unknown" : 165
+    }, {
+      "t" : 57,
+      "ok" : 1216,
+      "fail" : 29,
+      "unknown" : 186
+    }, {
+      "t" : 58,
+      "ok" : 1239,
+      "fail" : 22,
+      "unknown" : 199
+    }, {
+      "t" : 59,
+      "ok" : 997,
+      "fail" : 30,
+      "unknown" : 168
+    }, {
+      "t" : 60,
+      "ok" : 992,
+      "fail" : 17,
+      "unknown" : 141
+    }, {
+      "t" : 61,
+      "ok" : 1182,
+      "fail" : 48,
+      "unknown" : 174
+    }, {
+      "t" : 62,
+      "ok" : 1185,
+      "fail" : 40,
+      "unknown" : 189
+    }, {
+      "t" : 63,
+      "ok" : 1160,
+      "fail" : 48,
+      "unknown" : 191
+    }, {
+      "t" : 64,
+      "ok" : 992,
+      "fail" : 62,
+      "unknown" : 154
+    }, {
+      "t" : 65,
+      "ok" : 1095,
+      "fail" : 6,
+      "unknown" : 179
+    }, {
+      "t" : 66,
+      "ok" : 1196,
+      "fail" : 28,
+      "unknown" : 193
+    }, {
+      "t" : 67,
+      "ok" : 1171,
+      "fail" : 34,
+      "unknown" : 181
+    }, {
+      "t" : 68,
+      "ok" : 1163,
+      "fail" : 27,
+      "unknown" : 192
+    }, {
+      "t" : 69,
+      "ok" : 961,
+      "fail" : 29,
+      "unknown" : 145
+    }, {
+      "t" : 70,
+      "ok" : 1162,
+      "fail" : 62,
+      "unknown" : 185
+    }, {
+      "t" : 71,
+      "ok" : 1089,
+      "fail" : 69,
+      "unknown" : 168
+    }, {
+      "t" : 72,
+      "ok" : 1150,
+      "fail" : 44,
+      "unknown" : 194
+    }, {
+      "t" : 73,
+      "ok" : 1000,
+      "fail" : 33,
+      "unknown" : 161
+    }, {
+      "t" : 74,
+      "ok" : 1130,
+      "fail" : 34,
+      "unknown" : 181
+    }, {
+      "t" : 75,
+      "ok" : 1187,
+      "fail" : 55,
+      "unknown" : 172
+    }, {
+      "t" : 76,
+      "ok" : 1170,
+      "fail" : 44,
+      "unknown" : 183
+    }, {
+      "t" : 77,
+      "ok" : 1110,
+      "fail" : 27,
+      "unknown" : 184
+    }, {
+      "t" : 78,
+      "ok" : 976,
+      "fail" : 12,
+      "unknown" : 145
+    }, {
+      "t" : 79,
+      "ok" : 1168,
+      "fail" : 14,
+      "unknown" : 198
+    }, {
+      "t" : 80,
+      "ok" : 1197,
+      "fail" : 20,
+      "unknown" : 193
+    }, {
+      "t" : 81,
+      "ok" : 1219,
+      "fail" : 33,
+      "unknown" : 214
+    }, {
+      "t" : 82,
+      "ok" : 999,
+      "fail" : 51,
+      "unknown" : 145
+    }, {
+      "t" : 83,
+      "ok" : 1035,
+      "fail" : 19,
+      "unknown" : 173
+    }, {
+      "t" : 84,
+      "ok" : 1206,
+      "fail" : 18,
+      "unknown" : 193
+    }, {
+      "t" : 85,
+      "ok" : 1146,
+      "fail" : 56,
+      "unknown" : 181
+    }, {
+      "t" : 86,
+      "ok" : 1138,
+      "fail" : 21,
+      "unknown" : 176
+    }, {
+      "t" : 87,
+      "ok" : 924,
+      "fail" : 30,
+      "unknown" : 145
+    }, {
+      "t" : 88,
+      "ok" : 1148,
+      "fail" : 16,
+      "unknown" : 185
+    }, {
+      "t" : 89,
+      "ok" : 1123,
+      "fail" : 49,
+      "unknown" : 176
+    }, {
+      "t" : 90,
+      "ok" : 1141,
+      "fail" : 38,
+      "unknown" : 169
+    }, {
+      "t" : 91,
+      "ok" : 914,
+      "fail" : 29,
+      "unknown" : 140
+    }, {
+      "t" : 92,
+      "ok" : 1001,
+      "fail" : 58,
+      "unknown" : 145
+    }, {
+      "t" : 93,
+      "ok" : 1142,
+      "fail" : 43,
+      "unknown" : 173
+    }, {
+      "t" : 94,
+      "ok" : 1125,
+      "fail" : 25,
+      "unknown" : 179
+    }, {
+      "t" : 95,
+      "ok" : 1116,
+      "fail" : 33,
+      "unknown" : 165
+    }, {
+      "t" : 96,
+      "ok" : 967,
+      "fail" : 9,
+      "unknown" : 133
+    }, {
+      "t" : 97,
+      "ok" : 1065,
+      "fail" : 12,
+      "unknown" : 180
+    }, {
+      "t" : 98,
+      "ok" : 1112,
+      "fail" : 10,
+      "unknown" : 185
+    }, {
+      "t" : 99,
+      "ok" : 1133,
+      "fail" : 14,
+      "unknown" : 180
+    }, {
+      "t" : 100,
+      "ok" : 1037,
+      "fail" : 27,
+      "unknown" : 151
+    }, {
+      "t" : 101,
+      "ok" : 989,
+      "fail" : 25,
+      "unknown" : 136
+    }, {
+      "t" : 102,
+      "ok" : 1219,
+      "fail" : 19,
+      "unknown" : 197
+    }, {
+      "t" : 103,
+      "ok" : 1186,
+      "fail" : 31,
+      "unknown" : 171
+    }, {
+      "t" : 104,
+      "ok" : 1259,
+      "fail" : 10,
+      "unknown" : 200
+    }, {
+      "t" : 105,
+      "ok" : 911,
+      "fail" : 7,
+      "unknown" : 146
+    }, {
+      "t" : 106,
+      "ok" : 1104,
+      "fail" : 22,
+      "unknown" : 181
+    }, {
+      "t" : 107,
+      "ok" : 1102,
+      "fail" : 19,
+      "unknown" : 184
+    }, {
+      "t" : 108,
+      "ok" : 1219,
+      "fail" : 23,
+      "unknown" : 185
+    }, {
+      "t" : 109,
+      "ok" : 1087,
+      "fail" : 23,
+      "unknown" : 177
+    }, {
+      "t" : 110,
+      "ok" : 965,
+      "fail" : 21,
+      "unknown" : 136
+    }, {
+      "t" : 111,
+      "ok" : 1090,
+      "fail" : 31,
+      "unknown" : 170
+    }, {
+      "t" : 112,
+      "ok" : 1165,
+      "fail" : 34,
+      "unknown" : 180
+    }, {
+      "t" : 113,
+      "ok" : 1211,
+      "fail" : 34,
+      "unknown" : 194
+    }, {
+      "t" : 114,
+      "ok" : 1029,
+      "fail" : 40,
+      "unknown" : 160
+    }, {
+      "t" : 115,
+      "ok" : 976,
+      "fail" : 42,
+      "unknown" : 134
+    }, {
+      "t" : 116,
+      "ok" : 1145,
+      "fail" : 38,
+      "unknown" : 194
+    }, {
+      "t" : 117,
+      "ok" : 1083,
+      "fail" : 26,
+      "unknown" : 181
+    }, {
+      "t" : 118,
+      "ok" : 1138,
+      "fail" : 22,
+      "unknown" : 198
+    }, {
+      "t" : 119,
+      "ok" : 973,
+      "fail" : 37,
+      "unknown" : 140
+    }, {
+      "t" : 120,
+      "ok" : 1111,
+      "fail" : 14,
+      "unknown" : 173
+    }, {
+      "t" : 121,
+      "ok" : 1070,
+      "fail" : 15,
+      "unknown" : 177
+    }, {
+      "t" : 122,
+      "ok" : 1191,
+      "fail" : 24,
+      "unknown" : 214
+    }, {
+      "t" : 123,
+      "ok" : 1123,
+      "fail" : 19,
+      "unknown" : 178
+    }, {
+      "t" : 124,
+      "ok" : 1014,
+      "fail" : 16,
+      "unknown" : 161
+    }, {
+      "t" : 125,
+      "ok" : 1133,
+      "fail" : 33,
+      "unknown" : 176
+    }, {
+      "t" : 126,
+      "ok" : 1133,
+      "fail" : 18,
+      "unknown" : 183
+    }, {
+      "t" : 127,
+      "ok" : 1167,
+      "fail" : 22,
+      "unknown" : 201
+    }, {
+      "t" : 128,
+      "ok" : 1041,
+      "fail" : 24,
+      "unknown" : 155
+    }, {
+      "t" : 129,
+      "ok" : 1053,
+      "fail" : 26,
+      "unknown" : 160
+    }, {
+      "t" : 130,
+      "ok" : 1202,
+      "fail" : 39,
+      "unknown" : 171
+    }, {
+      "t" : 131,
+      "ok" : 1129,
+      "fail" : 25,
+      "unknown" : 185
+    }, {
+      "t" : 132,
+      "ok" : 1204,
+      "fail" : 25,
+      "unknown" : 168
+    }, {
+      "t" : 133,
+      "ok" : 964,
+      "fail" : 25,
+      "unknown" : 151
+    }, {
+      "t" : 134,
+      "ok" : 1210,
+      "fail" : 23,
+      "unknown" : 187
+    }, {
+      "t" : 135,
+      "ok" : 1187,
+      "fail" : 13,
+      "unknown" : 198
+    }, {
+      "t" : 136,
+      "ok" : 1143,
+      "fail" : 21,
+      "unknown" : 172
+    }, {
+      "t" : 137,
+      "ok" : 1092,
+      "fail" : 25,
+      "unknown" : 163
+    }, {
+      "t" : 138,
+      "ok" : 1001,
+      "fail" : 20,
+      "unknown" : 143
+    }, {
+      "t" : 139,
+      "ok" : 1128,
+      "fail" : 10,
+      "unknown" : 186
+    }, {
+      "t" : 140,
+      "ok" : 1163,
+      "fail" : 17,
+      "unknown" : 181
+    }, {
+      "t" : 141,
+      "ok" : 1218,
+      "fail" : 14,
+      "unknown" : 201
+    }, {
+      "t" : 142,
+      "ok" : 957,
+      "fail" : 11,
+      "unknown" : 147
+    }, {
+      "t" : 143,
+      "ok" : 1111,
+      "fail" : 9,
+      "unknown" : 163
+    }, {
+      "t" : 144,
+      "ok" : 1170,
+      "fail" : 24,
+      "unknown" : 180
+    }, {
+      "t" : 145,
+      "ok" : 1209,
+      "fail" : 34,
+      "unknown" : 208
+    }, {
+      "t" : 146,
+      "ok" : 1102,
+      "fail" : 9,
+      "unknown" : 186
+    }, {
+      "t" : 147,
+      "ok" : 908,
+      "fail" : 10,
+      "unknown" : 132
+    }, {
+      "t" : 148,
+      "ok" : 1103,
+      "fail" : 17,
+      "unknown" : 187
+    }, {
+      "t" : 149,
+      "ok" : 1177,
+      "fail" : 23,
+      "unknown" : 198
+    }, {
+      "t" : 150,
+      "ok" : 1144,
+      "fail" : 16,
+      "unknown" : 181
+    }, {
+      "t" : 151,
+      "ok" : 979,
+      "fail" : 29,
+      "unknown" : 147
+    }, {
+      "t" : 152,
+      "ok" : 993,
+      "fail" : 16,
+      "unknown" : 160
+    }, {
+      "t" : 153,
+      "ok" : 1144,
+      "fail" : 27,
+      "unknown" : 161
+    }, {
+      "t" : 154,
+      "ok" : 1111,
+      "fail" : 16,
+      "unknown" : 158
+    }, {
+      "t" : 155,
+      "ok" : 1139,
+      "fail" : 25,
+      "unknown" : 197
+    }, {
+      "t" : 156,
+      "ok" : 916,
+      "fail" : 15,
+      "unknown" : 142
+    }, {
+      "t" : 157,
+      "ok" : 1098,
+      "fail" : 22,
+      "unknown" : 173
+    }, {
+      "t" : 158,
+      "ok" : 1122,
+      "fail" : 33,
+      "unknown" : 185
+    }, {
+      "t" : 159,
+      "ok" : 1118,
+      "fail" : 20,
+      "unknown" : 197
+    }, {
+      "t" : 160,
+      "ok" : 1075,
+      "fail" : 13,
+      "unknown" : 167
+    }, {
+      "t" : 161,
+      "ok" : 1034,
+      "fail" : 13,
+      "unknown" : 162
+    }, {
+      "t" : 162,
+      "ok" : 1197,
+      "fail" : 9,
+      "unknown" : 194
+    }, {
+      "t" : 163,
+      "ok" : 1151,
+      "fail" : 30,
+      "unknown" : 171
+    }, {
+      "t" : 164,
+      "ok" : 1168,
+      "fail" : 50,
+      "unknown" : 180
+    }, {
+      "t" : 165,
+      "ok" : 1030,
+      "fail" : 15,
+      "unknown" : 157
+    }, {
+      "t" : 166,
+      "ok" : 1071,
+      "fail" : 18,
+      "unknown" : 165
+    }, {
+      "t" : 167,
+      "ok" : 1185,
+      "fail" : 23,
+      "unknown" : 170
+    }, {
+      "t" : 168,
+      "ok" : 1170,
+      "fail" : 23,
+      "unknown" : 182
+    }, {
+      "t" : 169,
+      "ok" : 1151,
+      "fail" : 22,
+      "unknown" : 186
+    }, {
+      "t" : 170,
+      "ok" : 908,
+      "fail" : 40,
+      "unknown" : 125
+    }, {
+      "t" : 171,
+      "ok" : 1201,
+      "fail" : 21,
+      "unknown" : 186
+    }, {
+      "t" : 172,
+      "ok" : 1145,
+      "fail" : 16,
+      "unknown" : 189
+    }, {
+      "t" : 173,
+      "ok" : 1187,
+      "fail" : 35,
+      "unknown" : 182
+    }, {
+      "t" : 174,
+      "ok" : 1052,
+      "fail" : 22,
+      "unknown" : 178
+    }, {
+      "t" : 175,
+      "ok" : 1011,
+      "fail" : 35,
+      "unknown" : 142
+    }, {
+      "t" : 176,
+      "ok" : 1168,
+      "fail" : 25,
+      "unknown" : 179
+    }, {
+      "t" : 177,
+      "ok" : 1186,
+      "fail" : 27,
+      "unknown" : 197
+    }, {
+      "t" : 178,
+      "ok" : 1138,
+      "fail" : 34,
+      "unknown" : 195
+    }, {
+      "t" : 179,
+      "ok" : 1014,
+      "fail" : 21,
+      "unknown" : 161
+    }, {
+      "t" : 180,
+      "ok" : 60,
+      "fail" : 0,
+      "unknown" : 5
+    } ],
+    "faults" : [ ]
   },
-  "run": {
-    "accounts": 20,
-    "amountMaxMinor": 5000,
-    "clientTimeout": "1s",
-    "duration": "1m0s",
-    "endedAt": "2026-11-05T17:27:53Z",
-    "faults": [],
-    "fundingMinor": 100000,
-    "scenario": "contention",
-    "seed": 1793899613594358800,
-    "startedAt": "2026-11-05T17:26:53Z",
-    "workers": 64
+  "run" : {
+    "seed" : 1793915226888696010,
+    "scenario" : "contention",
+    "faults" : [ ],
+    "accounts" : 20,
+    "workers" : 64,
+    "duration" : "3m0s",
+    "clientTimeout" : "1s",
+    "fundingMinor" : 100000,
+    "amountMaxMinor" : 5000,
+    "startedAt" : "2026-11-05T21:47:07Z",
+    "endedAt" : "2026-11-05T21:50:07Z"
   }
 }

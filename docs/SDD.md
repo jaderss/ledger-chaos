@@ -413,30 +413,32 @@ False positives are caught by the correct mode, which must pass every invariant 
 
 ### 5.14 Results
 
-`scripts/experiments.sh` runs every mode in its scenario and the locking comparison, 60 s each, 64 workers, the `.env` values otherwise. Keys are the workload keys, without the 20 funding transfers. The runs below are one batch on a laptop. `results/sample` keeps their `report.json`, and the report page reads them.
+`scripts/experiments.sh` runs every mode in its scenario for `DURATION` (60 s) and the locking comparison for `LOCK_DURATION` (180 s), 64 workers, the `.env` values otherwise. Keys are the workload keys, without the 20 funding transfers. The runs below are on a laptop, with the Java runner and checker. `results/sample` keeps their `report.json`, and the report page reads them.
 
-| Mode | Locking | Scenario | Keys | Faults | ok/s | p99 ms | Verdict |
-|---|---|---|---|---|---|---|---|
-| `correct` | ordered | `all` | 96,180 | 7 | 1,661 | 110 | Every invariant passes |
-| `correct` | serializable | `all` | 24,560 | 7 | 415 | 288 | Every invariant passes, 453 keys never answered |
-| `correct` | ordered | `db-latency`, 8 s faults | 47,797 | 4 | 820 | 143 | Every invariant passes, 254 keys never answered |
-| `no-idempotency` | ordered | `db-latency`, 8 s faults | 46,267 | 5 | 798 | 163 | Fails I4 (2,911), I5 (6), I6 (73), I7 (3,323) |
-| `dual-write` | ordered | `kafka-down` | 9,790 | 7 | 145 | 201 | Fails I8 (1,015), I9 (20) |
-| `unordered-locks` | ordered | `contention` | 2,030 | 0 | 32.5 | 999 | Fails I11 |
-| `read-modify-write` | ordered | `contention` | 133,417 | 0 | 2,316 | 80 | Fails I2 (20), I3 (5) |
+The runner is closed loop, and it shares the Docker VM's 4 CPUs with Postgres, Kafka and the three services. The mode runs went while the Docker disk was filling, which slowed them down but did not change what the checker found. Their throughput is left out: the table shows what each mode broke.
 
-Locking under contention, `correct` mode, no faults:
+| Mode | Locking | Scenario | Keys | Faults | Verdict |
+|---|---|---|---|---|---|
+| `correct` | ordered | `all` | 37,945 | 7 | Every invariant passes |
+| `correct` | serializable | `all` | 23,615 | 7 | Every invariant passes |
+| `correct` | ordered | `db-latency`, 8 s faults | 27,871 | 4 | Every invariant passes |
+| `no-idempotency` | ordered | `db-latency`, 8 s faults | 28,894 | 4 | Fails I4 (1,857), I5 (6), I6 (49), I7 (1,991) |
+| `dual-write` | ordered | `kafka-down` | 5,363 | 7 | Fails I8 (407), I9 (20) |
+| `unordered-locks` | ordered | `contention` | 1,949 | 0 | Fails I11 (128 deadlocks) |
+| `read-modify-write` | ordered | `contention` | 102,349 | 0 | Fails I2 (20), I3 (5) |
+
+Locking under contention, `correct` mode, no faults, on a clean disk, 180 s each so the JIT warm-up of a fresh stack weighs less:
 
 | Accounts | Locking | ok/s | p50 ms | p99 ms | Rollbacks | Unknown answers |
 |---|---|---|---|---|---|---|
-| 20 | ordered | 1,914 | 29 | 104 | 0 | 0 |
-| 20 | serializable | 956 | 47 | 195 | 121,093 | 7,343 |
-| 200 | ordered | 2,797 | 21 | 59 | 0 | 0 |
-| 200 | serializable | 2,089 | 27 | 91 | 33,314 | 54 |
+| 20 | ordered | 2,036 | 28 | 89 | 0 | 0 |
+| 20 | serializable | 1,078 | 42 | 163 | 465,560 | 30,410 |
+| 200 | ordered | 2,802 | 22 | 55 | 0 | 0 |
+| 200 | serializable | 2,222 | 26 | 80 | 121,344 | 414 |
 
-Ordered `for update` wins at both contention levels. With 20 accounts, serializable rolls back about two transactions per ok answer and answers half as many transfers per second. Its unknown answers are `503`s after `SERIALIZABLE_RETRIES` ran out, which the client retries with the same key, so the invariants still hold. With 200 accounts fewer transfers touch the same rows, and the gap shrinks. Ordered locks never roll back for contention: a transfer waits for the row instead of doing the work and throwing it away. Under faults the gap is wider: on `all`, serializable answered a quarter of what ordered did.
+Ordered `for update` wins at both contention levels. With 20 accounts, serializable rolls back 2.4 transactions per ok answer and answers about half as many transfers per second. Its unknown answers are `503`s after `SERIALIZABLE_RETRIES` ran out, which the client retries with the same key, so the invariants still hold. With 200 accounts fewer transfers touch the same rows: 0.3 rollbacks per ok answer, and serializable reaches 79% of ordered. Ordered locks never roll back for contention: a transfer waits for the row instead of doing the work and throwing it away.
 
-`read-modify-write` is faster than the correct mode, 2,316 against 1,914 ok/s, because it holds no locks while it reads. It is also wrong.
+`read-modify-write` holds no locks while it reads, so it answers more transfers than the correct mode in the same 60 s. It is also wrong.
 
 ---
 

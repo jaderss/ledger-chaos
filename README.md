@@ -1,6 +1,6 @@
 # ledger-chaos
 
-A double-entry ledger in Spring Boot, plus a Go chaos runner and checker that try to make it lose money.
+A double-entry ledger in Spring Boot, plus a Java chaos runner and checker that try to make it lose money.
 
 The runner sends thousands of transfers from 64 workers. It also kills the services, pauses Postgres, cuts the network and stops Kafka. After the run, the checker reads both databases, the Kafka topic and the client history, and checks 10 invariants.
 
@@ -12,38 +12,40 @@ The same runs go against four naive versions of the ledger. Each one is the corr
 
 | Mode | Faults | Transfers sent | Result |
 |---|---|---|---|
-| `correct` | every fault in the catalog, one at a time | 96,180 | all invariants pass |
-| `correct`, `SERIALIZABLE` | every fault in the catalog, one at a time | 24,560 | all invariants pass |
-| `correct` | 1.5 s database latency, 8 s at a time | 47,797 | all invariants pass |
-| `no-idempotency` | 1.5 s database latency, 8 s at a time | 46,267 | 2,911 acknowledged transfers posted more than once |
-| `dual-write` | Kafka stopped and started | 9,790 | 1,015 posted transfers never reached the topic |
-| `unordered-locks` | none, lock contention only | 2,030 | 101 deadlocks |
-| `read-modify-write` | none, lock contention only | 133,417 | 20 stored balances differ from their postings, 5 accounts overspent |
+| `correct` | every fault in the catalog, one at a time | 37,945 | all invariants pass |
+| `correct`, `SERIALIZABLE` | every fault in the catalog, one at a time | 23,615 | all invariants pass |
+| `correct` | 1.5 s database latency, 8 s at a time | 27,871 | all invariants pass |
+| `no-idempotency` | 1.5 s database latency, 8 s at a time | 28,894 | 1,857 acknowledged transfers posted more than once |
+| `dual-write` | Kafka stopped and started | 5,363 | 407 posted transfers never reached the topic |
+| `unordered-locks` | none, lock contention only | 1,949 | 128 deadlocks |
+| `read-modify-write` | none, lock contention only | 102,349 | 20 stored balances differ from their postings, 5 accounts overspent |
+
+The runner is closed loop: each of the 64 workers sends the next transfer when the last one answers. It shares the laptop's 4 Docker CPUs with Postgres, Kafka and the three services, so the counts compare modes in one batch, not machines.
 
 What a naive run looks like, from the checker:
 
 ```
-mode dual-write: 9810 keys, 9623 ok, 90 fail, 3618 unknown, 574 keys never answered, 77 mismatch attempts, 9636 transfers, 8532 events
-I8   FAIL   1015  every posted transfer reaches the topic, and only those
-            posted transfer aa87a822-70e0-4a17-a54a-fee2b984fcf8 is not on the topic
+mode dual-write: 5383 keys, 5026 ok, 9 fail, 3678 unknown, 575 keys never answered, 60 mismatch attempts, 5207 transfers, 4791 events
+I8   FAIL    407  every posted transfer reaches the topic, and only those
+            posted transfer 8a58c6f3-9d36-4733-a9f4-addcbb3fd3aa is not on the topic
 I9   FAIL     20  projector balances equal the ledger's sums of postings
-            account 08bbd43d-9dbe-4d6f-b62e-1a6ceb4a2776 projected 212909, ledger postings sum to 211792
-145 ok/s over 66 s, p50 47 ms, p99 201 ms, 22350 commits, 0 rollbacks, 7 faults
+            account 09078166-78c9-4a72-b024-1261c68eec17 projected 206576, ledger postings sum to 200080
+76 ok/s over 66 s, p50 88 ms, p99 356 ms, 7321 commits, 0 rollbacks, 7 faults
 verdict: dual-write fails I8, I9, and must fail I8, I9
 ```
 
 ## Ordered locks against SERIALIZABLE
 
-The same correct ledger, two ways to stop concurrent transfers from losing money, no faults:
+The same correct ledger, two ways to stop concurrent transfers from losing money, no faults, 180 second runs:
 
 | Accounts | Locking | ok/s | p99 ms | Rollbacks |
 |---|---|---|---|---|
-| 20 | `FOR UPDATE` in id order | 1,914 | 104 | 0 |
-| 20 | `SERIALIZABLE`, retry up to 5 times | 956 | 195 | 121,093 |
-| 200 | `FOR UPDATE` in id order | 2,797 | 59 | 0 |
-| 200 | `SERIALIZABLE`, retry up to 5 times | 2,089 | 91 | 33,314 |
+| 20 | `FOR UPDATE` in id order | 2,036 | 89 | 0 |
+| 20 | `SERIALIZABLE`, retry up to 5 times | 1,078 | 163 | 465,560 |
+| 200 | `FOR UPDATE` in id order | 2,802 | 55 | 0 |
+| 200 | `SERIALIZABLE`, retry up to 5 times | 2,222 | 80 | 121,344 |
 
-Ordered locks win at both levels. A transfer waits for the row, while a serializable transaction does the work, then throws it away when it loses. With 20 accounts that happens about twice per ok answer. Both pass every invariant.
+Ordered locks win at both levels. A transfer waits for the row, while a serializable transaction does the work, then throws it away when it loses. With 20 accounts that happens more than twice per ok answer. Both pass every invariant.
 
 ## How the correct mode works
 
@@ -88,15 +90,15 @@ Each mode is one line in `TransferServiceConfig`, so the diff from the correct m
 | I9 | Projector balances equal the ledger's sums of postings |
 | I11 | No transfer transaction ends in a deadlock |
 
-I10 (linearizable balance reads, with Porcupine) is not built yet.
+I10 (linearizable balance reads) is not built yet.
 
 ## Run it
 
-Needs Docker and a JDK 25. Go runs inside containers.
+Needs Docker and a JDK 25.
 
 ```bash
 make up                                          # Postgres, Kafka, Toxiproxy, roles, topics
-make test                                        # Java and Go tests
+make test                                        # every module
 make chaos MODE=correct SCENARIO=all             # one run, results in results/<run id>
 make chaos MODE=dual-write SCENARIO=kafka-down
 make chaos-all                                   # every mode and the locking comparison
@@ -113,8 +115,8 @@ Scenarios: `contention`, `db-latency`, `kafka-down`, `kills`, `db-faults`, `all`
 | `services/ledger` | Transfer API, idempotency, locking, postings, outbox |
 | `services/relay` | Outbox to Kafka |
 | `services/projector` | Idempotent consumer and read model |
-| `chaos` | Go workload and fault injector, standard library only |
-| `checker` | Go invariant checks over both databases, the topic and the history |
+| `services/chaos` | Workload and fault injector, plain Java with Jackson only |
+| `services/checker` | Invariant checks over both databases, the topic and the history, plain Java with Jdbi |
 | `report` | Results page: every run, invariants per run, the locking comparison, faults over time |
 | `results/sample` | The `report.json` of the runs above |
 | `docs/SDD.md` | Design, algorithms, fault catalog, versions |
