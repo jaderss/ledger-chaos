@@ -6,19 +6,32 @@ services:
     command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      LEDGER_DB_PASSWORD: ${LEDGER_DB_PASSWORD:-ledger}
-      RELAY_DB_PASSWORD: ${RELAY_DB_PASSWORD:-relay}
-      PROJECTOR_DB_PASSWORD: ${PROJECTOR_DB_PASSWORD:-projector}
-      STATEMENT_TIMEOUT: ${STATEMENT_TIMEOUT:-2s}
-      IDLE_IN_TX_TIMEOUT: ${IDLE_IN_TX_TIMEOUT:-10s}
-    volumes:
-      - ./infra/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     ports: ["5432:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ledger && pg_isready -U postgres -d projector"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 2s
       timeout: 2s
       retries: 30
+
+  db-init:
+    image: flyway/flyway:${FLYWAY_VERSION:-12.4.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["migrate"]
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/postgres
+      FLYWAY_USER: postgres
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      FLYWAY_LOCATIONS: filesystem:/flyway/migrations
+      FLYWAY_PLACEHOLDERS_LEDGERPASSWORD: ${LEDGER_DB_PASSWORD:-ledger}
+      FLYWAY_PLACEHOLDERS_RELAYPASSWORD: ${RELAY_DB_PASSWORD:-relay}
+      FLYWAY_PLACEHOLDERS_PROJECTORPASSWORD: ${PROJECTOR_DB_PASSWORD:-projector}
+      FLYWAY_PLACEHOLDERS_STATEMENTTIMEOUT: ${STATEMENT_TIMEOUT:-2s}
+      FLYWAY_PLACEHOLDERS_IDLEINTXTIMEOUT: ${IDLE_IN_TX_TIMEOUT:-10s}
+    volumes:
+      - ./infra/postgres/migrations:/flyway/migrations:ro
+    restart: "no"
 
   kafka:
     image: apache/kafka:${KAFKA_VERSION:-4.4.0}

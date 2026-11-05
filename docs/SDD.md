@@ -360,9 +360,9 @@ ledger-chaos/
 ├── .gitignore
 ├── CLAUDE.md                        local only, ignored globally
 ├── Makefile                         up, test, chaos, chaos-all, report, down, clean
-├── compose.yaml                     postgres, kafka, kafka-topics, toxiproxy, later the services
+├── compose.yaml                     postgres, db-init, kafka, kafka-topics, toxiproxy, later the services
 ├── infra/
-│   ├── postgres/init.sh             roles ledger, relay, projector with their timeouts, two databases
+│   ├── postgres/migrations/         Flyway, run by db-init: roles, databases, role timeouts
 │   └── toxiproxy/toxiproxy.json     proxies postgres (15432) and kafka (19092)
 ├── sonar-project.properties
 ├── README.md
@@ -476,6 +476,7 @@ Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on
 | PostgreSQL image | 18.6 | One instance, two databases |
 | Kafka image | `apache/kafka:4.4.0` | KRaft, single broker |
 | Toxiproxy image | `ghcr.io/shopify/toxiproxy:2.13.0` | |
+| Flyway image | `flyway/flyway:12.4.0` | `db-init`, same version as the BOM |
 | Node, nginx | 26, 1.31 | `report`, same as prime-bench |
 
 ### 7.2 Build and test
@@ -512,6 +513,7 @@ GO_VERSION=1.27
 POSTGRES_VERSION=18.6
 KAFKA_VERSION=4.4.0
 TOXIPROXY_VERSION=2.13.0
+FLYWAY_VERSION=12.4.0
 
 APP_CPUS=2
 APP_MEMORY_MB=1536
@@ -550,7 +552,7 @@ SEED=
 
 Kafka sits behind Toxiproxy, so its advertised listener points at the proxy address. Without that, clients reconnect around the proxy after the first metadata call. The broker has four listeners: `CLIENT` on 9092, advertised as `toxiproxy:19092`, for the services; `INTERNAL` on 29092 for the broker itself and topic setup, so a cut proxy never takes the broker down; `CONTROLLER` on 9093; `HOST` on 9094, advertised as `localhost:9094`, for tools on the laptop.
 
-Postgres has one role per service. `init.sh` sets `statement_timeout` on all three and `idle_in_transaction_session_timeout` on `relay` (§5.8), so the limits hold whatever the client does. The checker connects as `postgres`, straight to port 5432, because it needs `pg_stat_reset()` and must never go through a fault.
+Postgres has one role per service. The `db-init` service runs Flyway as `postgres` against the `postgres` database: `V1` creates the roles, `V2` creates the `ledger` and `projector` databases outside a transaction, and the repeatable `R__role_settings` sets `statement_timeout` on all three roles and `idle_in_transaction_session_timeout` on `relay` (§5.8), so the limits hold whatever the client does. Passwords and timeouts come from `.env` as placeholders. A changed timeout changes the script's checksum, so the next `make up` applies it without recreating Postgres. Each service still runs its own schema migrations with Flyway inside Spring Boot. The checker connects as `postgres`, straight to port 5432, because it needs `pg_stat_reset()` and must never go through a fault.
 
 ---
 
