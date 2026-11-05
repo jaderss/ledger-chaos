@@ -280,20 +280,26 @@ Error handling: the default Spring Kafka `DefaultErrorHandler` retries 9 times, 
 
 Workload:
 
-* `ACCOUNTS` accounts in one currency, a few with overdraft. A small number on purpose, to force lock contention.
-* `WORKERS` goroutines send transfers with random pairs and amounts, each with a new UUID key.
+* `ACCOUNTS` accounts in one currency, every `OVERDRAFT_EVERY`th with overdraft. A small number on purpose, to force lock contention.
+* `WORKERS` goroutines send transfers with random pairs and amounts from 1 to `AMOUNT_MAX_MINOR`, each with a new UUID key.
 * Timeout, connection error or `5xx`: record `unknown`, retry with the same key up to `RETRIES` times.
 * `DUPLICATE_RATE` of transfers are sent twice in parallel with the same key.
 * `MISMATCH_RATE` of transfers reuse a key with another body. Only keys that already got a definite `201` or `200` are reused. A key whose outcome is still unknown may never have committed, and then the mismatch body would become the transfer in a correct ledger and fail I7 for the wrong reason.
-* `READERS` goroutines read balances for I10.
+* `READERS` goroutines read balances for I10. Not built yet, they come with the Porcupine check (§12 Q4).
+
+Every request has its own `CLIENT_TIMEOUT`, not the run's deadline, so the end of the run never cuts a request short. The runner uses only the Go standard library: the ledger, the Docker Engine API and the Toxiproxy API are a few HTTP calls each.
 
 History, one JSON line per event:
 
 ```json
-{"t":1730744525114,"worker":7,"op":"transfer","key":"7f1c...","phase":"invoke","body":{"from":"0b5f...","to":"9c21...","amount":2500}}
-{"t":1730744525161,"worker":7,"op":"transfer","key":"7f1c...","phase":"ok","status":201,"transferId":"e2b9..."}
+{"t":1730744525114,"worker":7,"op":"transfer","key":"7f1c...","phase":"invoke","body":{"from":"0b5f...","to":"9c21...","amount":2500,"currency":"EUR"}}
+{"t":1730744525161,"worker":7,"op":"transfer","key":"7f1c...","phase":"ok","status":201,"transferId":"e2b9...","transferStatus":"POSTED"}
 {"t":1730744526002,"worker":3,"op":"transfer","key":"a90d...","phase":"unknown","error":"context deadline exceeded"}
+{"t":1730744527310,"worker":5,"op":"transfer","key":"7f1c...","phase":"invoke","mismatch":true,"body":{"from":"0b5f...","to":"9c21...","amount":2501,"currency":"EUR"}}
+{"t":1730744527322,"worker":5,"op":"transfer","key":"7f1c...","phase":"fail","mismatch":true,"status":422,"problem":"idempotency-key-mismatch"}
 ```
+
+Every attempt writes an `invoke` and one result. `ok` is a `201` or `200`, `fail` is any `4xx`, `unknown` is a timeout, a connection error or a `5xx`. A mismatch attempt carries `mismatch: true` on both lines, so the checker keeps it apart from the key's own answers.
 
 Nemesis: every `FAULT_INTERVAL` it picks a fault from the scenario, applies it for `FAULT_DURATION`, heals it, and writes `faults.jsonl`.
 
@@ -305,11 +311,11 @@ Nemesis: every `FAULT_INTERVAL` it picks a fault from the scenario, applies it f
 | `pause-db` | Docker API `pause` and `unpause` on Postgres |
 | `restart-db` | Docker API `restart` on Postgres |
 | `db-cut` | Toxiproxy: disable the Postgres proxy |
-| `db-latency` | Toxiproxy `latency` toxic above the client timeout |
+| `db-latency` | Toxiproxy `latency` toxic of `DB_LATENCY` (1.5 s), above the 1 s client timeout and below the 5 s socket timeout, so transactions still commit after the client gave up |
 | `db-reset` | Toxiproxy `reset_peer` toxic |
 | `kafka-down` | Docker API `stop` and `start` on Kafka |
 
-Docker Engine API through the Unix socket with `net/http`, no Docker SDK.
+Docker Engine API through the Unix socket with `net/http`, no Docker SDK. Containers are found by their Compose labels. The runner heals every fault in the catalog before the workload starts and again after it stops, so a run that crashed halfway never leaves the next one with a paused database or a disabled proxy.
 
 A **scenario** is a named set of faults for the nemesis. `make chaos MODE=... SCENARIO=...` runs one pair.
 
@@ -322,7 +328,9 @@ A **scenario** is a named set of faults for the nemesis. `make chaos MODE=... SC
 | `db-faults` | `pause-db`, `restart-db`, `db-cut`, `db-reset` | Database gone or slow in every way the catalog has |
 | `all` | Every fault above | Long runs on the laptop and the correct mode in CI |
 
-End of run: heal everything, stop the workload, wait until `outbox` has no unpublished rows and the projector consumer group has no lag, with `QUIET_TIMEOUT` as the limit. A timeout is reported as an I8 or I9 failure.
+End of run: stop the workload, heal everything, write `run.json` with the seed and the settings. The checker then waits until `outbox` has no unpublished rows and the projector consumer group has no lag, with `QUIET_TIMEOUT` as the limit. A timeout is reported as an I8 and I9 failure. The wait lives in the checker because the checker already reads both databases and Kafka, and the runner stays a client.
+
+`scripts/chaos.sh` runs one mode and scenario from a clean stack: `docker compose down`, then infrastructure, `db-init`, topics, the three services, `pg_stat_reset()` on the ledger database, the runner, the checker. The stack starts clean every time because a naive run leaves wrong data behind, and the next run would fail I1 to I3 on it.
 
 ### 5.11 Checker
 
@@ -340,7 +348,9 @@ End of run: heal everything, stop the workload, wait until `outbox` has no unpub
 | I10 | Porcupine model of a register per account over transfers and reads (stretch goal) |
 | I11 | `pg_stat_database.deadlocks` for the ledger database is zero. `scripts/chaos.sh` calls `pg_stat_reset()` on that database before the workload |
 
-Output: one line per invariant with pass or fail and a count, plus `report.json`. Exit code `1` on any failure.
+Output: one line per invariant with pass or fail, a count and up to five examples, plus `report.json` with the run settings from `run.json`. Exit code `1` on any failure.
+
+Each invariant is a pure function over a `Snapshot` of the history, both databases and the topic. The loaders are separate. That lets the tests corrupt one field of a clean snapshot per invariant and assert that exactly that invariant fails. The checker connects as `postgres` straight to port 5432 and to Kafka on the `INTERNAL` listener, never through Toxiproxy.
 
 ### 5.12 Naive modes
 
@@ -452,23 +462,28 @@ ledger-chaos/
 │           │   └── TransferPosted.java              record, own copy of the contract, refuses unbalanced postings
 │           ├── main/resources/db/migration/V1__projector.sql
 │           └── test/java/dev/jaderss/projector/ProjectorTest.java   duplicates, parallel partitions, DLT
-├── chaos/                           Go
+├── chaos/                           Go, standard library only
+│   ├── Dockerfile
 │   ├── go.mod
 │   ├── main.go
+│   ├── config.go                    settings from the environment
+│   ├── ledger.go                    transfer client, classifies answers into ok, fail, unknown
 │   ├── workload.go
-│   ├── nemesis.go
+│   ├── nemesis.go                   fault catalog and scenarios
 │   ├── docker.go                    Docker Engine API over the Unix socket
 │   ├── toxiproxy.go
 │   ├── history.go
-│   └── *_test.go
+│   └── *_test.go                    fakes for the ledger, Docker and Toxiproxy
 ├── checker/                         Go
+│   ├── Dockerfile
 │   ├── go.mod
-│   ├── main.go
-│   ├── invariants.go
+│   ├── main.go                      quiet wait, load, check, print, report.json
+│   ├── invariants.go                pure checks over a Snapshot
 │   ├── history.go
-│   ├── topic.go                     franz-go, reads ledger.transfers from the start
+│   ├── db.go                        pgx loaders for both databases
+│   ├── topic.go                     franz-go, reads ledger.transfers from the start, offsets and lag
 │   ├── linearizability.go           Porcupine, stretch goal
-│   └── *_test.go
+│   └── *_test.go                    one corruption per invariant, loaders against the compose stack
 ├── report/                          React, Vite, Recharts, nginx
 ├── scripts/
 │   └── chaos.sh                     one mode and scenario per call
@@ -506,7 +521,7 @@ Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on
 | Go | 1.27 | `chaos` and `checker` |
 | pgx | v5.12.0 | `checker` |
 | franz-go | v1.22.2 | `checker`, topic scan |
-| Toxiproxy Go client | v2.13.0 | `chaos` |
+| franz-go `kadm` | v1.19.0 | `checker`, offsets and consumer lag. Separate module from franz-go |
 | Porcupine | v1.3.1 | `checker`, stretch goal |
 | PostgreSQL image | 18.6 | One instance, two databases |
 | Kafka image | `apache/kafka:4.4.0` | KRaft, single broker |
@@ -583,7 +598,10 @@ MISMATCH_RATE=0.01
 FAULT_INTERVAL=10s
 FAULT_DURATION=3s
 QUIET_TIMEOUT=60s
-FUNDING_MINOR=
+FUNDING_MINOR=100000
+AMOUNT_MAX_MINOR=5000
+OVERDRAFT_EVERY=10
+DB_LATENCY=1500ms
 SEED=
 ```
 
@@ -659,7 +677,7 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 | Q3 | Postgres replica and failover? | Tests lost commits after promotion, a real finding. | No, single node. |
 | Q4 | Porcupine check in v1? | Strong result, more work. | Stretch goal. |
 | Q5 | Number of accounts for contention? | Too few and every transfer waits, too many and nothing collides. | 20, adjusted after the first runs. |
-| Q6 | `FUNDING_MINOR` per account? | Too high and nothing is ever rejected, too low and most transfers fail. It also decides whether `read-modify-write` breaks I3. | Unset, picked after the first runs. |
+| Q6 | `FUNDING_MINOR` per account? | Too high and nothing is ever rejected, too low and most transfers fail. It also decides whether `read-modify-write` breaks I3. | 100000 per account with amounts up to 5000, a first guess. The first 30 s contention run had 759 insufficient-funds rejections against 51,594 ok answers. Revisit with `read-modify-write`. |
 
 ---
 

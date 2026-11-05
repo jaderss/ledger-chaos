@@ -1,0 +1,1 @@
+{"accounts":20,"amountMaxMinor":5000,"clientTimeout":"1s","duration":"1m30s","endedAt":"2026-11-05T13:57:58Z","faults":["kill-ledger","kill-relay","kill-projector","pause-db","restart-db","db-cut","db-latency","db-reset","kafka-down"],"fundingMinor":100000,"scenario":"all","seed":1793886987961461596,"startedAt":"2026-11-05T13:56:28Z","workers":64}

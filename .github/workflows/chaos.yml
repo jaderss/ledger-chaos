@@ -1,0 +1,32 @@
+name: Chaos
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chaos:
+    name: ${{ matrix.mode }} / ${{ matrix.scenario }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mode: correct, scenario: all }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run
+        run: make chaos MODE=${{ matrix.mode }} SCENARIO=${{ matrix.scenario }} DURATION=60s FAULT_INTERVAL=8s RUN_ID=ci
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.mode }}-${{ matrix.scenario }}
+          path: results/ci
+      - if: always()
+        run: make down

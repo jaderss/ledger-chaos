@@ -15,7 +15,13 @@ record TransferPosted(
         String currency,
         List<Line> postings) {
 
-    record Line(UUID accountId, long amountMinor) {}
+    record Line(UUID accountId, long amountMinor) {
+        Line {
+            if (accountId == null) {
+                throw new IllegalArgumentException("posting without an account id");
+            }
+        }
+    }
 
     TransferPosted {
         Objects.requireNonNull(eventId, "eventId");

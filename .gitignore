@@ -10,3 +10,5 @@ coverage.out
 .DS_Store
 .env.local
 .jqwik-database
+/chaos/chaos
+/checker/checker

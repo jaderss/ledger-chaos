@@ -183,6 +183,18 @@ class ProjectorTest {
     }
 
     @Test
+    @DisplayName("an event with an empty account id goes to the DLT instead of retrying forever")
+    void emptyAccountToDeadLetter() {
+        var transferId = UUID.randomUUID().toString();
+        publishRaw(transferId, """
+                {"eventId":"%s","type":"TransferPosted","transferId":"%s","currency":"EUR",
+                 "postings":[{"accountId":"","amountMinor":-5},{"accountId":"","amountMinor":5}]}
+                """.formatted(UUID.randomUUID(), transferId));
+
+        await().atMost(Duration.ofSeconds(20)).until(() -> deadLetterKeys().contains(transferId));
+    }
+
+    @Test
     @DisplayName("an event whose postings do not sum to zero goes to the DLT and is not applied")
     void unbalancedToDeadLetter() {
         var a = UUID.randomUUID();

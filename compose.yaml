@@ -166,3 +166,48 @@ services:
       interval: 2s
       timeout: 2s
       retries: 60
+
+  chaos:
+    profiles: [tools]
+    build:
+      context: chaos
+      args:
+        GO_VERSION: ${GO_VERSION:-1.27}
+    image: ledger-chaos/chaos
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./results:/results
+    environment:
+      RUN_DIR: /results/${RUN_ID:-local}
+      SCENARIO: ${SCENARIO:-contention}
+      ACCOUNTS: ${ACCOUNTS:-20}
+      WORKERS: ${WORKERS:-64}
+      DURATION: ${DURATION:-120s}
+      CLIENT_TIMEOUT: ${CLIENT_TIMEOUT:-1s}
+      RETRIES: ${RETRIES:-5}
+      DUPLICATE_RATE: ${DUPLICATE_RATE:-0.05}
+      MISMATCH_RATE: ${MISMATCH_RATE:-0.01}
+      FAULT_INTERVAL: ${FAULT_INTERVAL:-10s}
+      FAULT_DURATION: ${FAULT_DURATION:-3s}
+      FUNDING_MINOR: ${FUNDING_MINOR:-}
+      AMOUNT_MAX_MINOR: ${AMOUNT_MAX_MINOR:-}
+      OVERDRAFT_EVERY: ${OVERDRAFT_EVERY:-}
+      DB_LATENCY: ${DB_LATENCY:-}
+      SEED: ${SEED:-}
+
+  checker:
+    profiles: [tools]
+    build:
+      context: checker
+      args:
+        GO_VERSION: ${GO_VERSION:-1.27}
+    image: ledger-chaos/checker
+    volumes:
+      - ./results:/results
+    environment:
+      RUN_DIR: /results/${RUN_ID:-local}
+      LEDGER_MODE: ${LEDGER_MODE:-correct}
+      QUIET_TIMEOUT: ${QUIET_TIMEOUT:-60s}
+      LEDGER_DSN: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ledger
+      PROJECTOR_DSN: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/projector
+      KAFKA_BROKERS: kafka:29092
