@@ -352,7 +352,7 @@ End of run: stop the workload, heal everything, write `run.json` with the seed a
 | I7 | Replays returned the same transfer id and status as the first `ok`. Mismatches returned `422` and no transfer has their body |
 | I8 | Every `POSTED` transfer is on the topic at least once, matched by `transferId`. Every event on the topic matches a `POSTED` transfer, with the same postings. In `correct` mode also: one outbox row per `POSTED` transfer and none unpublished |
 | I9 | Projector `balance` equals the ledger's sum of postings for every account, and `ledger.transfers.DLT` is empty. An account with no projector row counts as zero. The sum of postings, not `account.balance_minor`, so a wrong stored balance fails I2 only |
-| I10 | Porcupine model of a register per account over transfers and reads (stretch goal) |
+| I10 | Linearizability check of a register per account over transfers and reads (stretch goal) |
 | I11 | `pg_stat_database.deadlocks` for the ledger database is zero. `scripts/chaos.sh` calls `pg_stat_reset()` on that database before the workload |
 
 Output: one line per invariant with pass or fail, a count and up to five examples, a stats line, a verdict line, plus `report.json` with the verdict, the stats and the run settings from `run.json`. The stats come from `history.jsonl` and `faults.jsonl`, workload only (the funding transfers are left out): distinct keys sent, ok answers per second, p50 and p99 latency of definite answers, answers per second by outcome, the fault windows in seconds from the start, and `xact_commit` and `xact_rollback` of the ledger database. The commit count includes the relay's polling, so the report compares rollbacks against ok answers, not against commits. The checker knows the **Must fail** set of each mode (§5.12) and judges the run itself: `correct` passes when every invariant passes, a naive mode passes when every invariant in its set fails. Exit code `0` on a passing verdict, `1` otherwise, so `make chaos` and `chaos.yml` need no logic of their own. An unknown `LEDGER_MODE` is an error before anything is loaded.
@@ -644,7 +644,6 @@ Checked on Maven Central, Docker Hub and GitHub releases on 2026-11-04. JVM libr
 
 ```bash
 JAVA_VERSION=25
-GO_VERSION=1.27
 POSTGRES_VERSION=18.6
 KAFKA_VERSION=4.4.0
 TOXIPROXY_VERSION=2.13.0

@@ -29,7 +29,7 @@ The project is about these rules. Every phase adds a way to break them and a way
 | I7 | Same key and same body give the same answer. Same key and another body give `422` and change nothing. | Checker against the client history |
 | I8 | Every posted transfer reaches the topic once the system is quiet. In the correct mode it goes through exactly one outbox row. | Checker, SQL and Kafka |
 | I9 | Projector balances equal the ledger's sums of postings once the system is quiet. | Checker |
-| I10 | Reads of an account balance are linearizable. | Porcupine over the history (stretch goal) |
+| I10 | Reads of an account balance are linearizable. | Linearizability check over the history (stretch goal) |
 | I11 | No transfer transaction ends in a deadlock. | Checker, `pg_stat_database` |
 
 ---
