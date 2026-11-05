@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -47,6 +48,25 @@ public class AccountStore {
                 .param("second", second.value())
                 .query(AccountStore::map)
                 .list();
+    }
+
+    public List<Account> lockInRequestOrder(AccountId from, AccountId to) {
+        return Stream.concat(lock(from).stream(), lock(to).stream()).toList();
+    }
+
+    public List<Account> readWithoutLock(AccountId first, AccountId second) {
+        return jdbc.sql(COLUMNS + "where id in (:first, :second)")
+                .param("first", first.value())
+                .param("second", second.value())
+                .query(AccountStore::map)
+                .list();
+    }
+
+    private Optional<Account> lock(AccountId id) {
+        return jdbc.sql(COLUMNS + "where id = :id for update")
+                .param("id", id.value())
+                .query(AccountStore::map)
+                .optional();
     }
 
     public void updateBalance(Account account) {

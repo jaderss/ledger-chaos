@@ -15,11 +15,11 @@ import (
 )
 
 func main() {
-	failed, err := run(os.Stdout)
+	ok, err := run(os.Stdout)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if failed {
+	if !ok {
 		os.Exit(1)
 	}
 }
@@ -40,6 +40,9 @@ func run(out io.Writer) (bool, error) {
 	topic, dlt, group := getenv("TOPIC", "ledger.transfers"), getenv("DLT_TOPIC", "ledger.transfers.DLT"), getenv("GROUP", "projector")
 	ctx := context.Background()
 	s := Snapshot{Mode: getenv("LEDGER_MODE", "correct")}
+	if err := knownMode(s.Mode); err != nil {
+		return false, err
+	}
 
 	history, err := os.Open(filepath.Join(runDir, "history.jsonl"))
 	if err != nil {
@@ -81,8 +84,10 @@ func run(out io.Writer) (bool, error) {
 	}
 
 	results := Check(s)
-	failed := Print(out, s, results)
-	return failed, writeReport(runDir, s, results)
+	Print(out, s, results)
+	ok, verdict := Verdict(s.Mode, results)
+	fmt.Fprintln(out, "verdict:", verdict)
+	return ok, writeReport(runDir, s, results, ok, verdict)
 }
 
 func waitQuiet(ctx context.Context, ledger *pgx.Conn, kafka *Kafka, group, topic string, timeout time.Duration) (bool, string) {
@@ -105,33 +110,37 @@ func waitQuiet(ctx context.Context, ledger *pgx.Conn, kafka *Kafka, group, topic
 	}
 }
 
-func Print(out io.Writer, s Snapshot, results []Result) bool {
+func Print(out io.Writer, s Snapshot, results []Result) {
 	counts := map[string]int{}
 	for _, k := range s.Keys {
 		for _, a := range k.Answers {
 			counts[a.Phase]++
 		}
 		counts["mismatch"] += len(k.Mismatches)
+		if len(k.Answers) > 0 && len(k.definite()) == 0 {
+			counts["unanswered"]++
+		}
 	}
-	fmt.Fprintf(out, "mode %s: %d keys, %d ok, %d fail, %d unknown, %d mismatch attempts, %d transfers, %d events\n",
-		s.Mode, len(s.Keys), counts["ok"], counts["fail"], counts["unknown"], counts["mismatch"],
+	fmt.Fprintf(out, "mode %s: %d keys, %d ok, %d fail, %d unknown, %d keys never answered, %d mismatch attempts, %d transfers, %d events\n",
+		s.Mode, len(s.Keys), counts["ok"], counts["fail"], counts["unknown"], counts["unanswered"], counts["mismatch"],
 		len(s.Transfers), len(s.Events))
-	failed := false
 	for _, r := range results {
 		verdict := "PASS"
 		if !r.Pass {
-			verdict, failed = "FAIL", true
+			verdict = "FAIL"
 		}
 		fmt.Fprintf(out, "%-4s %s %6d  %s\n", r.ID, verdict, r.Count, r.Rule)
 		for _, e := range r.Examples {
 			fmt.Fprintf(out, "            %s\n", e)
 		}
 	}
-	return failed
 }
 
-func writeReport(runDir string, s Snapshot, results []Result) error {
-	report := map[string]any{"mode": s.Mode, "quiet": s.Quiet, "quietDetail": s.QuietDetail, "results": results}
+func writeReport(runDir string, s Snapshot, results []Result, ok bool, verdict string) error {
+	report := map[string]any{
+		"mode": s.Mode, "mustFail": mustFail[s.Mode], "ok": ok, "verdict": verdict,
+		"quiet": s.Quiet, "quietDetail": s.QuietDetail, "results": results,
+	}
 	if data, err := os.ReadFile(filepath.Join(runDir, "run.json")); err == nil {
 		var run map[string]any
 		if json.Unmarshal(data, &run) == nil {

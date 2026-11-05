@@ -88,33 +88,41 @@ func runFixture(t *testing.T, commit bool) (string, *bytes.Buffer, bool, error) 
 		t.Setenv(name, value)
 	}
 	var out bytes.Buffer
-	failed, err := run(&out)
-	return dir, &out, failed, err
+	ok, err := run(&out)
+	return dir, &out, ok, err
 }
 
 func TestRunPassesACleanSystemAndWritesTheReport(t *testing.T) {
-	dir, out, failed, err := runFixture(t, true)
-	if err != nil || failed {
-		t.Fatalf("failed %v, err %v\n%s", failed, err, out)
+	dir, out, ok, err := runFixture(t, true)
+	if err != nil || !ok || !strings.Contains(out.String(), "verdict: correct passes every invariant") {
+		t.Fatalf("ok %v, err %v\n%s", ok, err, out)
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, "report.json"))
 	var report struct {
+		OK      bool           `json:"ok"`
 		Quiet   bool           `json:"quiet"`
 		Run     map[string]any `json:"run"`
 		Results []Result       `json:"results"`
 	}
-	if err := json.Unmarshal(data, &report); err != nil || !report.Quiet || report.Run["seed"] != 7.0 || len(report.Results) != 10 {
+	if err := json.Unmarshal(data, &report); err != nil || !report.OK || !report.Quiet || report.Run["seed"] != 7.0 || len(report.Results) != 10 {
 		t.Fatalf("unexpected report %s", data)
 	}
 }
 
 func TestRunFailsI8AndI9WhenTheProjectorNeverCatchesUp(t *testing.T) {
-	_, out, failed, err := runFixture(t, false)
-	if err != nil || !failed {
-		t.Fatalf("failed %v, err %v\n%s", failed, err, out)
+	_, out, ok, err := runFixture(t, false)
+	if err != nil || ok {
+		t.Fatalf("ok %v, err %v\n%s", ok, err, out)
 	}
 	if !strings.Contains(out.String(), "I8   FAIL") || !strings.Contains(out.String(), "projector lag 1 after 1s") {
 		t.Fatalf("unexpected output:\n%s", out)
+	}
+}
+
+func TestRunRefusesAnUnknownMode(t *testing.T) {
+	t.Setenv("LEDGER_MODE", "corect")
+	if _, err := run(&bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "corect") {
+		t.Fatalf("expected an unknown mode error, got %v", err)
 	}
 }
 

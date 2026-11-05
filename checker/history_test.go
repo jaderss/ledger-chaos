@@ -50,14 +50,12 @@ func TestParseEventSumsPostingsPerAccount(t *testing.T) {
 	}
 }
 
-func TestPrintMarksFailuresAndReturnsTrue(t *testing.T) {
+func TestPrintMarksFailures(t *testing.T) {
 	var out bytes.Buffer
 	s := clean()
 	s.Deadlocks = 1
-	if !Print(&out, s, Check(s)) {
-		t.Fatal("expected a failure")
-	}
-	if !strings.Contains(out.String(), "I11  FAIL") || !strings.Contains(out.String(), "1 deadlocks") {
+	Print(&out, s, Check(s))
+	if !strings.Contains(out.String(), "I11  FAIL") || !strings.Contains(out.String(), "1 keys never answered") || !strings.Contains(out.String(), "1 deadlocks") {
 		t.Fatalf("unexpected output:\n%s", out.String())
 	}
 }

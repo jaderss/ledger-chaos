@@ -75,11 +75,12 @@ Inside `ledger` the code is layered, with a pure domain at the center. Not hexag
 | Package | Role | Depends on |
 |---|---|---|
 | `domain` | Values, ids, `TransferDecision.decide`: two accounts and an amount in, `Post` or `Reject` out. No Spring, JDBC or Jackson | Nothing |
-| `app` | Runs the transaction around the decision: claim the key, lock, decide, write | `domain`, `persistence` |
-| `persistence` | One `JdbcClient` class per table, no interfaces in front | `domain` |
+| `app` | Runs the transaction around the decision: claim the key, load the accounts, decide, write, publish | `domain`, `persistence`, `messaging` |
+| `persistence` | One `JdbcClient` class per table, no interfaces in front. `LedgerStores` groups the five | `domain` |
+| `messaging` | `DirectPublisher`, the Kafka send of the `dual-write` mode. The correct mode never uses it | `domain` |
 | `api` | Controllers, Problem Details, the correlation id filter | `app`, `domain`, `persistence` for reads |
 
-`ArchitectureTest` enforces the arrows: `domain` imports no framework and none of the other packages, and `persistence` never imports `app` or `api`. The only interface with more than one implementation is `TransferService`, one class per mode (§5.12).
+`ArchitectureTest` enforces the arrows: `domain` imports no framework and none of the other packages, and `persistence` and `messaging` never import `app`, `api` or each other. `TransferSteps` holds the three steps that change between modes (§5.12): claim the key, load the accounts, publish the event. Each step is a small functional interface, so a mode is one line in `TransferServiceConfig`, not a class.
 
 ### 5.3 Data model: ledger database
 
@@ -322,11 +323,13 @@ A **scenario** is a named set of faults for the nemesis. `make chaos MODE=... SC
 | Scenario | Faults | Why it exists |
 |---|---|---|
 | `contention` | (none) | Lock contention only. Breaks `read-modify-write` and `unordered-locks`, and is the baseline for the correct mode |
-| `db-latency` | `db-latency` | Client timeouts on transfers that still commit, so retries hit keys with unknown outcome. Breaks `no-idempotency` on I6 |
+| `db-latency` | `db-latency` | Client timeouts on transfers that still commit, so retries hit keys with unknown outcome. Breaks `no-idempotency` on I6, only when `FAULT_DURATION` is longer than `(RETRIES + 1) × CLIENT_TIMEOUT` (see below) |
 | `kafka-down` | `kafka-down` | Breaks `dual-write`: the transfer commits and the publish fails |
 | `kills` | `kill-ledger`, `kill-relay`, `kill-projector` | Crashes between the steps of §5.6, §5.8 and §5.9 |
 | `db-faults` | `pause-db`, `restart-db`, `db-cut`, `db-reset` | Database gone or slow in every way the catalog has |
 | `all` | Every fault above | Long runs on the laptop and the correct mode in CI |
+
+I6 only checks keys the client gave up on: every attempt `unknown`, none definite. A fault shorter than the retry budget heals before the last retry, so every key ends with a definite answer and I6 passes with nothing to check. The first `no-idempotency` run with the 3 s default had zero such keys and passed I6. With an 8 s fault, 70 keys had more than one transfer and I6 failed. `db-latency` runs use `FAULT_DURATION=8s` and `FAULT_INTERVAL=12s` against the default 6 attempts of 1 s, and the checker prints the number of keys never answered, so an I6 with nothing to check shows in the output.
 
 End of run: stop the workload, heal everything, write `run.json` with the seed and the settings. The checker then waits until `outbox` has no unpublished rows and the projector consumer group has no lag, with `QUIET_TIMEOUT` as the limit. A timeout is reported as an I8 and I9 failure. The wait lives in the checker because the checker already reads both databases and Kafka, and the runner stays a client.
 
@@ -348,23 +351,46 @@ End of run: stop the workload, heal everything, write `run.json` with the seed a
 | I10 | Porcupine model of a register per account over transfers and reads (stretch goal) |
 | I11 | `pg_stat_database.deadlocks` for the ledger database is zero. `scripts/chaos.sh` calls `pg_stat_reset()` on that database before the workload |
 
-Output: one line per invariant with pass or fail, a count and up to five examples, plus `report.json` with the run settings from `run.json`. Exit code `1` on any failure.
+Output: one line per invariant with pass or fail, a count and up to five examples, a verdict line, plus `report.json` with the verdict and the run settings from `run.json`. The checker knows the **Must fail** set of each mode (§5.12) and judges the run itself: `correct` passes when every invariant passes, a naive mode passes when every invariant in its set fails. Exit code `0` on a passing verdict, `1` otherwise, so `make chaos` and `chaos.yml` need no logic of their own. An unknown `LEDGER_MODE` is an error before anything is loaded.
 
 Each invariant is a pure function over a `Snapshot` of the history, both databases and the topic. The loaders are separate. That lets the tests corrupt one field of a clean snapshot per invariant and assert that exactly that invariant fails. The checker connects as `postgres` straight to port 5432 and to Kafka on the `INTERNAL` listener, never through Toxiproxy.
 
 ### 5.12 Naive modes
 
-`LEDGER_MODE` selects the `TransferService` bean. One class per mode, small and obviously wrong. Never on by default. `LEDGER_MODE` and `LEDGER_LOCKING` bind to enums in a `LedgerProperties` record with `@ConfigurationProperties` and `@Validated`, so a typo fails startup instead of running the default mode.
+`LEDGER_MODE` picks the steps of the one `LedgerTransferService`. Each naive mode swaps one step of the correct mode and keeps the rest, so the whole difference is one line in `TransferServiceConfig`. Never on by default. `LEDGER_MODE` and `LEDGER_LOCKING` bind to enums in a `LedgerProperties` record with `@ConfigurationProperties` and `@Validated`, so a typo fails startup instead of running the default mode.
 
 | Mode | Change | Scenario | Must fail |
 |---|---|---|---|
 | `correct` | Algorithm in §5.6 | Every scenario | (none) |
-| `no-idempotency` | Skips steps 2 and 3. A retry with the same key posts again, with its own `transfer` row and the same `request_key` | `db-latency` | I4, I6, I7 |
-| `dual-write` | No outbox row. Publishes to Kafka after the commit from the ledger | `kafka-down` | I8, I9 |
-| `unordered-locks` | Locks `from` then `to` | `contention` | I11 |
+| `no-idempotency` | Key claim always succeeds without touching the `idempotency` table. A retry with the same key posts again, with its own `transfer` row and the same `request_key` | `db-latency` | I4, I6, I7 |
+| `dual-write` | No outbox row. `DirectPublisher` sends to Kafka from a `TransactionSynchronization.afterCommit`, and a failed send is only logged | `kafka-down` | I8, I9 |
+| `unordered-locks` | Locks `from`, then `to`, one `select ... for update` each | `contention` | I11 |
 | `read-modify-write` | Reads balances without `for update`, writes computed values | `contention` | I2 |
 
-A naive run passes when the checker fails at least its **Must fail** set. Other failures go in the report but do not fail the job: `read-modify-write` also fails I3 when a lost update lets an account without overdraft overspend, and that depends on `FUNDING_MINOR` against the transfer amounts. False positives are caught by the correct mode, which must pass every invariant in every scenario.
+A naive run passes when the checker fails at least its **Must fail** set. Other failures go in the report but do not change the verdict:
+
+* `no-idempotency` also fails I5. A first attempt times out but commits, the retry posts again and drains the account, and a later retry gets `422` insufficient funds while the key already has a `POSTED` transfer.
+* `read-modify-write` also fails I11. Without the row locks of step 4, the two balance `update`s are the first locks the transaction takes, in request order, so it deadlocks like `unordered-locks`.
+* `read-modify-write` fails I3 only when a lost update lets an account without overdraft overspend, and that depends on `FUNDING_MINOR` against the transfer amounts (§12 Q6).
+
+Every naive mode also has a Testcontainers test that shows its defect without the chaos runner. `NoIdempotencyModeTest` posts the same key twice. `DualWriteModeTest` reads the event from Kafka and finds no outbox row. `UnorderedLocksModeTest` and `ReadModifyWriteModeTest` hold a row lock in an open transaction, start a transfer on another thread, wait until it blocks in `pg_stat_activity`, then take a second lock for a deadlock, or commit a change to the same balance for a lost update. `TransferConcurrencyTest` runs the same two races on the correct mode and gets no deadlock and no lost update.
+
+First runs, 60 s each unless noted, default settings otherwise:
+
+| Mode | Scenario | Keys | Verdict |
+|---|---|---|---|
+| `correct` | `contention`, 30 s | 49,387 | Every invariant passes |
+| `correct` | `db-latency`, 8 s faults | 45,467 | Every invariant passes, 256 keys never answered |
+| `correct` | `kafka-down` | 135,133 | Every invariant passes |
+| `correct` | `db-faults` | 57,711 | Every invariant passes, 56 keys never answered |
+| `no-idempotency` | `db-latency`, 8 s faults | 38,691 | Fails I4 (2,397), I5 (12), I6 (70), I7 (2,678) |
+| `dual-write` | `kafka-down` | 8,229 | Fails I8 (925 transfers never on the topic) and I9 (20 accounts) |
+| `unordered-locks` | `contention` | 1,670 | Fails I11 (112 deadlocks) |
+| `read-modify-write` | `contention` | 3,681 | Fails I2 (20 accounts) and I11 (63 deadlocks) |
+
+The key counts also show the cost of the naive locking: with the same 64 workers, `unordered-locks` and `read-modify-write` finished a small part of what the correct mode did, because every deadlock waits for `deadlock_timeout` before Postgres picks a victim.
+
+False positives are caught by the correct mode, which must pass every invariant in every scenario.
 
 ### 5.13 Failure modes of the system
 
@@ -424,19 +450,23 @@ ledger-chaos/
 │   │       │   │   ├── LedgerProperties.java        @ConfigurationProperties, @Validated, mode and locking enums
 │   │       │   │   ├── TransferService.java         interface
 │   │       │   │   ├── TransferOutcome.java         sealed: Created, Replayed, KeyMismatch
-│   │       │   │   ├── TransferServiceConfig.java   picks the TransferService from LedgerProperties
-│   │       │   │   ├── LockingTransferService.java  correct mode
-│   │       │   │   ├── SerializableTransferService.java
-│   │       │   │   └── naive/                       one class per naive mode
+│   │       │   │   ├── TransferServiceConfig.java   one line per mode: which claim, load and publish steps
+│   │       │   │   ├── TransferSteps.java           record of the three steps a mode can swap
+│   │       │   │   ├── LedgerTransferService.java   the transaction of §5.6 over the steps
+│   │       │   │   └── SerializableTransferService.java   Phase 5
+│   │       │   ├── messaging/
+│   │       │   │   └── DirectPublisher.java         dual-write only: send after commit, no outbox
 │   │       │   └── persistence/                     JdbcClient stores
 │   │       │       ├── AccountStore.java, IdempotencyStore.java, TransferStore.java, PostingStore.java, OutboxStore.java
+│   │       │       └── LedgerStores.java            record of the five stores
 │   │       ├── main/resources/
 │   │       │   ├── application.yaml
 │   │       │   └── db/migration/V1__ledger.sql, V2__posting_triggers.sql, V3__relay_grants.sql
 │   │       └── test/java/dev/jaderss/ledger/
 │   │           ├── domain/MoneyTest.java, TransferDecisionTest.java, RequestHashTest.java
 │   │           ├── domain/LedgerPropertyTest.java   jqwik
-│   │           ├── app/TransferConcurrencyTest.java Testcontainers, virtual threads, parallel duplicate keys
+│   │           ├── app/TransferConcurrencyTest.java Testcontainers, virtual threads, parallel duplicate keys, lock races
+│   │           ├── app/*ModeTest.java               one per naive mode, its defect without the chaos runner
 │   │           ├── persistence/PostingTriggersTest.java   sum-zero and append-only triggers
 │   │           ├── api/TransferControllerTest.java  port 0, every row of §5.5 except 503
 │   │           ├── api/AccountControllerTest.java
@@ -479,6 +509,7 @@ ledger-chaos/
 │   ├── go.mod
 │   ├── main.go                      quiet wait, load, check, print, report.json
 │   ├── invariants.go                pure checks over a Snapshot
+│   ├── verdict.go                   Must fail set per mode, pass or fail of the run
 │   ├── history.go
 │   ├── db.go                        pgx loaders for both databases
 │   ├── topic.go                     franz-go, reads ledger.transfers from the start, offsets and lag
@@ -511,7 +542,7 @@ Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on
 | Java (Temurin) | 25 | LTS |
 | Spring Boot | 4.1.2 | Parent of the three services |
 | Spring Framework | 7.0.10 | BOM |
-| Spring Kafka | 4.1.2 | BOM, `relay` and `projector` |
+| Spring Kafka | 4.1.2 | BOM, `relay` and `projector`, and `ledger` for the `dual-write` mode only |
 | Kafka clients | 4.2.2 | BOM |
 | Jackson | 3.1.7 | BOM |
 | Flyway | 12.4.0 | BOM, plus `flyway-database-postgresql` |
@@ -623,7 +654,7 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 | Architecture | Domain has no Spring or JDBC imports | `ArchitectureTest` |
 | Chaos | Short run per mode and scenario | `chaos.yml` |
 
-`chaos.yml` runs a matrix of modes, each with the scenario from §5.12. The `correct` job runs `all` and passes when the checker exits `0`. Each naive job passes when the checker exits `1` and the report names at least its **Must fail** invariants. A naive mode that stops failing means the checker or the scenario lost its teeth.
+`chaos.yml` runs a matrix of modes, each with the scenario from §5.12, plus `correct` on `all` and on `db-latency` with the long fault, the only run where I6 has keys to check in the correct mode. Every job passes when the checker's verdict passes (§5.11). A naive mode that stops failing means the checker or the scenario lost its teeth.
 
 ---
 
@@ -677,7 +708,7 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 | Q3 | Postgres replica and failover? | Tests lost commits after promotion, a real finding. | No, single node. |
 | Q4 | Porcupine check in v1? | Strong result, more work. | Stretch goal. |
 | Q5 | Number of accounts for contention? | Too few and every transfer waits, too many and nothing collides. | 20, adjusted after the first runs. |
-| Q6 | `FUNDING_MINOR` per account? | Too high and nothing is ever rejected, too low and most transfers fail. It also decides whether `read-modify-write` breaks I3. | 100000 per account with amounts up to 5000, a first guess. The first 30 s contention run had 759 insufficient-funds rejections against 51,594 ok answers. Revisit with `read-modify-write`. |
+| Q6 | `FUNDING_MINOR` per account? | Too high and nothing is ever rejected, too low and most transfers fail. It also decides whether `read-modify-write` breaks I3. | 100000 per account with amounts up to 5000, a first guess. The first 30 s contention run had 759 insufficient-funds rejections against 51,594 ok answers. `read-modify-write` did not break I3 in its first 60 s contention run: lost updates left stored balances far from the postings, but no posting sum went below zero. |
 
 ---
 

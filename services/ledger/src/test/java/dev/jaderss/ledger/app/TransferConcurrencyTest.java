@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 
 @SpringBootTest
 @Import({PostgresContainer.class, Fixtures.class})
@@ -32,9 +31,6 @@ class TransferConcurrencyTest {
     @Autowired
     Fixtures fixtures;
 
-    @Autowired
-    JdbcClient jdbc;
-
     private static <T> List<T> runAll(List<Callable<T>> tasks) throws Exception {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             var results = new ArrayList<T>();
@@ -45,18 +41,12 @@ class TransferConcurrencyTest {
         }
     }
 
-    private long deadlocks() {
-        return jdbc.sql("select deadlocks from pg_stat_database where datname = current_database()")
-                .query(Long.class)
-                .single();
-    }
-
     @Test
     @DisplayName("transfers in both directions on the same two accounts keep the money and never deadlock")
     void contention() throws Exception {
         var a = fixtures.account(5_000);
         var b = fixtures.account(5_000);
-        var deadlocksBefore = deadlocks();
+        var deadlocksBefore = fixtures.deadlocks();
 
         List<Callable<TransferOutcome>> tasks = IntStream.range(0, 400)
                 .<Callable<TransferOutcome>>mapToObj(
@@ -68,7 +58,7 @@ class TransferConcurrencyTest {
         assertThat(fixtures.balance(a) + fixtures.balance(b)).isEqualTo(10_000);
         assertThat(fixtures.balance(a)).isEqualTo(fixtures.sumOfPostings(a));
         assertThat(fixtures.balance(b)).isEqualTo(fixtures.sumOfPostings(b));
-        assertThat(deadlocks()).isEqualTo(deadlocksBefore);
+        assertThat(fixtures.deadlocks()).isEqualTo(deadlocksBefore);
     }
 
     @Test
@@ -113,5 +103,34 @@ class TransferConcurrencyTest {
             case Replayed(var t) -> t.id();
             case KeyMismatch _ -> throw new AssertionError("unexpected mismatch");
         };
+    }
+
+    @Test
+    @DisplayName("a transfer against the id order waits for a transaction that locks in id order, without a deadlock")
+    void idOrderNeverDeadlocks() throws Exception {
+        var ids = fixtures.inIdOrder(fixtures.account(1_000), fixtures.account(1_000));
+        var low = ids.getFirst();
+        var high = ids.getLast();
+        var deadlocksBefore = fixtures.deadlocks();
+
+        var racer = fixtures.race(
+                () -> fixtures.lock(low), () -> fixtures.lock(high), () -> fixtures.transfer(high, low, 1));
+
+        assertThat(racer.get()).isInstanceOf(Created.class);
+        assertThat(fixtures.deadlocks()).isEqualTo(deadlocksBefore);
+    }
+
+    @Test
+    @DisplayName("a transfer that waits on a balance changed by another transaction posts on the new balance")
+    void noLostUpdate() throws Exception {
+        var from = fixtures.account(1_000);
+        var to = fixtures.account(0);
+        var other = fixtures.account(1_000);
+
+        var racer =
+                fixtures.race(() -> fixtures.transfer(other, to, 5), () -> {}, () -> fixtures.transfer(from, to, 1));
+
+        assertThat(racer.get()).isInstanceOf(Created.class);
+        assertThat(fixtures.balance(to)).isEqualTo(6).isEqualTo(fixtures.sumOfPostings(to));
     }
 }

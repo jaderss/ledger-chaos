@@ -24,7 +24,7 @@ class ArchitectureTest {
             .resideInAPackage("..domain..")
             .should()
             .dependOnClassesThat()
-            .resideInAnyPackage("..app..", "..api..", "..persistence..");
+            .resideInAnyPackage("..app..", "..api..", "..persistence..", "..messaging..");
 
     @ArchTest
     static final ArchRule persistenceDoesNotKnowTheApi = noClasses()
@@ -32,5 +32,13 @@ class ArchitectureTest {
             .resideInAPackage("..persistence..")
             .should()
             .dependOnClassesThat()
-            .resideInAnyPackage("..api..", "..app..");
+            .resideInAnyPackage("..api..", "..app..", "..messaging..");
+
+    @ArchTest
+    static final ArchRule messagingDoesNotKnowTheApi = noClasses()
+            .that()
+            .resideInAPackage("..messaging..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("..api..", "..app..", "..persistence..");
 }
