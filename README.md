@@ -12,25 +12,38 @@ The same runs go against four naive versions of the ledger. Each one is the corr
 
 | Mode | Faults | Transfers sent | Result |
 |---|---|---|---|
-| `correct` | none, lock contention only (30 s) | 49,387 | all invariants pass |
-| `correct` | 1.5 s database latency, 8 s at a time | 45,467 | all invariants pass |
-| `correct` | Kafka stopped and started | 135,133 | all invariants pass |
-| `correct` | Postgres paused, restarted, cut, reset | 57,711 | all invariants pass |
-| `no-idempotency` | 1.5 s database latency | 38,691 | 2,397 acknowledged transfers posted more than once |
-| `dual-write` | Kafka stopped and started | 8,229 | 925 posted transfers never reached the topic |
-| `unordered-locks` | none, lock contention only | 1,670 | 112 deadlocks |
-| `read-modify-write` | none, lock contention only | 3,681 | 20 stored balances differ from their postings |
+| `correct` | every fault in the catalog, one at a time | 96,180 | all invariants pass |
+| `correct`, `SERIALIZABLE` | every fault in the catalog, one at a time | 24,560 | all invariants pass |
+| `correct` | 1.5 s database latency, 8 s at a time | 47,797 | all invariants pass |
+| `no-idempotency` | 1.5 s database latency, 8 s at a time | 46,267 | 2,911 acknowledged transfers posted more than once |
+| `dual-write` | Kafka stopped and started | 9,790 | 1,015 posted transfers never reached the topic |
+| `unordered-locks` | none, lock contention only | 2,030 | 101 deadlocks |
+| `read-modify-write` | none, lock contention only | 133,417 | 20 stored balances differ from their postings, 5 accounts overspent |
 
 What a naive run looks like, from the checker:
 
 ```
-mode dual-write: 8229 keys, 7939 ok, 96 fail, 3636 unknown, 0 keys never answered, 73 mismatch attempts, 8066 transfers, 7038 events
-I8   FAIL    925  every posted transfer reaches the topic, and only those
-            posted transfer 3553948a-860b-4b47-aa01-55a1d6f34abd is not on the topic
+mode dual-write: 9810 keys, 9623 ok, 90 fail, 3618 unknown, 574 keys never answered, 77 mismatch attempts, 9636 transfers, 8532 events
+I8   FAIL   1015  every posted transfer reaches the topic, and only those
+            posted transfer aa87a822-70e0-4a17-a54a-fee2b984fcf8 is not on the topic
 I9   FAIL     20  projector balances equal the ledger's sums of postings
-            account 27969b66-2103-4878-ac8c-d9afa71d0774 projected 139376, ledger postings sum to 171213
+            account 08bbd43d-9dbe-4d6f-b62e-1a6ceb4a2776 projected 212909, ledger postings sum to 211792
+145 ok/s over 66 s, p50 47 ms, p99 201 ms, 22350 commits, 0 rollbacks, 7 faults
 verdict: dual-write fails I8, I9, and must fail I8, I9
 ```
+
+## Ordered locks against SERIALIZABLE
+
+The same correct ledger, two ways to stop concurrent transfers from losing money, no faults:
+
+| Accounts | Locking | ok/s | p99 ms | Rollbacks |
+|---|---|---|---|---|
+| 20 | `FOR UPDATE` in id order | 1,914 | 104 | 0 |
+| 20 | `SERIALIZABLE`, retry up to 5 times | 956 | 195 | 121,093 |
+| 200 | `FOR UPDATE` in id order | 2,797 | 59 | 0 |
+| 200 | `SERIALIZABLE`, retry up to 5 times | 2,089 | 91 | 33,314 |
+
+Ordered locks win at both levels. A transfer waits for the row, while a serializable transaction does the work, then throws it away when it loses. With 20 accounts that happens about twice per ok answer. Both pass every invariant.
 
 ## How the correct mode works
 
@@ -56,7 +69,7 @@ client ──► ledger ──► Postgres (transfer, postings, outbox)
 | `no-idempotency` | Skips the key claim, so a retry posts again | I4, I6, I7 |
 | `dual-write` | No outbox. Sends to Kafka after the commit | I8, I9 |
 | `unordered-locks` | Locks `from` then `to`, not by id | I11 |
-| `read-modify-write` | Reads balances without a lock and writes them back | I2 |
+| `read-modify-write` | Reads balances without a lock and writes them back | I2 (also breaks I3 when an account overspends) |
 
 Each mode is one line in `TransferServiceConfig`, so the diff from the correct mode is the bug.
 
@@ -86,6 +99,8 @@ make up                                          # Postgres, Kafka, Toxiproxy, r
 make test                                        # Java and Go tests
 make chaos MODE=correct SCENARIO=all             # one run, results in results/<run id>
 make chaos MODE=dual-write SCENARIO=kafka-down
+make chaos-all                                   # every mode and the locking comparison
+make report                                      # results page on http://localhost:8090
 make down
 ```
 
@@ -100,6 +115,8 @@ Scenarios: `contention`, `db-latency`, `kafka-down`, `kills`, `db-faults`, `all`
 | `services/projector` | Idempotent consumer and read model |
 | `chaos` | Go workload and fault injector, standard library only |
 | `checker` | Go invariant checks over both databases, the topic and the history |
+| `report` | Results page: every run, invariants per run, the locking comparison, faults over time |
+| `results/sample` | The `report.json` of the runs above |
 | `docs/SDD.md` | Design, algorithms, fault catalog, versions |
 
 ## What it skips
