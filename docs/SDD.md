@@ -360,7 +360,10 @@ ledger-chaos/
 ├── .gitignore
 ├── CLAUDE.md                        local only, ignored globally
 ├── Makefile                         up, test, chaos, chaos-all, report, down, clean
-├── compose.yaml
+├── compose.yaml                     postgres, kafka, kafka-topics, toxiproxy, later the services
+├── infra/
+│   ├── postgres/init.sh             roles ledger, relay, projector with their timeouts, two databases
+│   └── toxiproxy/toxiproxy.json     proxies postgres (15432) and kafka (19092)
 ├── sonar-project.properties
 ├── README.md
 ├── services/
@@ -545,7 +548,9 @@ FUNDING_MINOR=
 SEED=
 ```
 
-Kafka sits behind Toxiproxy, so its advertised listener points at the proxy address. Without that, clients reconnect around the proxy after the first metadata call.
+Kafka sits behind Toxiproxy, so its advertised listener points at the proxy address. Without that, clients reconnect around the proxy after the first metadata call. The broker has four listeners: `CLIENT` on 9092, advertised as `toxiproxy:19092`, for the services; `INTERNAL` on 29092 for the broker itself and topic setup, so a cut proxy never takes the broker down; `CONTROLLER` on 9093; `HOST` on 9094, advertised as `localhost:9094`, for tools on the laptop.
+
+Postgres has one role per service. `init.sh` sets `statement_timeout` on all three and `idle_in_transaction_session_timeout` on `relay` (§5.8), so the limits hold whatever the client does. The checker connects as `postgres`, straight to port 5432, because it needs `pg_stat_reset()` and must never go through a fault.
 
 ---
 
