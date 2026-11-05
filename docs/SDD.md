@@ -457,7 +457,7 @@ ledger-chaos/
 ├── services/
 │   ├── pom.xml                      aggregator: ledger, relay, projector
 │   ├── mvnw
-│   ├── Dockerfile                   one for the three services, MODULE build arg
+│   ├── Dockerfile                   one for all five modules, MODULE build arg. Target service: Temurin JRE. Target tool: jlink runtime on distroless
 │   ├── ledger/
 │   │   ├── pom.xml
 │   │   └── src/
@@ -593,7 +593,8 @@ Checked on Maven Central, Docker Hub and GitHub releases on 2026-11-04. JVM libr
 
 | Item | Version | Notes |
 |---|---|---|
-| Java (Temurin) | 25 | LTS |
+| Java (Temurin) | 25 | LTS. The services run on the Temurin JRE image |
+| Tool runtime | `jlink` from Temurin 25 on `gcr.io/distroless/cc-debian13:nonroot` | `chaos` and `checker`: only the JDK modules `jdeps` finds in them and their libraries, 63 MB instead of 191 MB for the JRE, shared by both images. `java.desktop` stays because Jackson reaches `java.beans` |
 | Spring Boot | 4.1.2 | Parent of the three services |
 | Spring Framework | 7.0.10 | BOM |
 | Spring Kafka | 4.1.2 | BOM, `relay` and `projector`, and `ledger` for the `dual-write` mode only |

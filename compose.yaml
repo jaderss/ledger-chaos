@@ -179,6 +179,7 @@ services:
       args:
         JAVA_VERSION: ${JAVA_VERSION:-25}
         MODULE: chaos
+      target: tool
     image: ledger-chaos/chaos
     user: "0"
     volumes:
@@ -220,6 +221,7 @@ services:
       args:
         JAVA_VERSION: ${JAVA_VERSION:-25}
         MODULE: checker
+      target: tool
     image: ledger-chaos/checker
     volumes:
       - ./results:/results
