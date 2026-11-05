@@ -70,6 +70,17 @@ There is no small, runnable project that injects real faults into a ledger and t
 | `checker` | Invariant checks, report JSON | `checker` |
 | `report` | Results page per mode and scenario | `report` |
 
+Inside `ledger` the code is layered, with a pure domain at the center. Not hexagonal.
+
+| Package | Role | Depends on |
+|---|---|---|
+| `domain` | Values, ids, `TransferDecision.decide`: two accounts and an amount in, `Post` or `Reject` out. No Spring, JDBC or Jackson | Nothing |
+| `app` | Runs the transaction around the decision: claim the key, lock, decide, write | `domain`, `persistence` |
+| `persistence` | One `JdbcClient` class per table, no interfaces in front | `domain` |
+| `api` | Controllers, Problem Details, the correlation id filter | `app`, `domain`, `persistence` for reads |
+
+`ArchitectureTest` enforces the arrows: `domain` imports no framework and none of the other packages, and `persistence` never imports `app` or `api`. The only interface with more than one implementation is `TransferService`, one class per mode (§5.12).
+
 ### 5.3 Data model: ledger database
 
 ```sql
@@ -601,6 +612,11 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 
 **What:** the usual Java choice.
 **Why not:** amounts are whole minor units, `long` with `Math.addExact` is exact and maps to `bigint` in Postgres and in Go. Same choice as the prime-bench gateway contract.
+
+### 10.5 Hexagonal ports and adapters for the ledger
+
+**What:** `app` owns interfaces such as `Accounts` and `Outbox`, and `persistence` implements them, so dependencies point inward.
+**Why not:** every port would have one adapter, Postgres. The usual payoff is testing `app` with in-memory fakes, but what this project proves happens inside Postgres: the wait on the idempotency primary key, `for update` in id order, the deferred trigger. A fake would pass where the database fails, so `app` is tested against Postgres in Testcontainers. The domain is already free of framework code (§5.2), which is the part of hexagonal that matters here.
 
 ---
 
