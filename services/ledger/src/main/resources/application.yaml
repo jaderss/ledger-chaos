@@ -24,6 +24,7 @@ spring:
 ledger:
   mode: ${LEDGER_MODE:correct}
   locking: ${LEDGER_LOCKING:ordered}
+  serializable-retries: ${SERIALIZABLE_RETRIES:5}
   topic: ledger.transfers
 
 management:

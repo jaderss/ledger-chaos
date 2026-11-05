@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,7 +47,7 @@ func fakeLedger(t *testing.T, handler http.HandlerFunc) (*Workload, *Log) {
 	}
 	t.Cleanup(func() { log.Close() })
 	return &Workload{
-		ledger: NewLedgerClient(server.URL), log: log, currency: "EUR", retries: 3,
+		ledger: NewLedgerClient(server.URL, 8), log: log, currency: "EUR", retries: 3,
 		clientTimeout: time.Second, amountMax: 10, workers: 2,
 	}, log
 }
@@ -146,5 +149,38 @@ func TestCreateAccountFailsOnConflict(t *testing.T) {
 	})
 	if err := w.ledger.CreateAccount(context.Background(), "a", "EUR", false); err == nil {
 		t.Fatal("expected an error")
+	}
+}
+
+func TestLedgerClientReusesConnections(t *testing.T) {
+	var opened atomic.Int64
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"t","status":"POSTED"}`))
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			opened.Add(1)
+		}
+	}
+	server.Start()
+	defer server.Close()
+
+	const workers, requests = 16, 50
+	client := NewLedgerClient(server.URL, workers)
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Go(func() {
+			for i := range requests {
+				client.Transfer(context.Background(), fmt.Sprintf("k%d-%d", w, i), Body{From: "a", To: "b", Amount: 1, Currency: "EUR"})
+			}
+		})
+	}
+	wg.Wait()
+	if err := client.CreateAccount(context.Background(), "a", "EUR", false); err != nil {
+		t.Fatal(err)
+	}
+	if n := opened.Load(); n > 2*workers {
+		t.Fatalf("%d requests opened %d connections, want at most %d", workers*requests+1, n, 2*workers)
 	}
 }

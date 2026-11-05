@@ -68,7 +68,7 @@ There is no small, runnable project that injects real faults into a ledger and t
 | `projector` | Idempotent consumer, read model of balances | `services/projector` |
 | `chaos` | Workload, nemesis (fault injector), history | `chaos` |
 | `checker` | Invariant checks, report JSON | `checker` |
-| `report` | Results page per mode and scenario | `report` |
+| `report` | Results page: every run, invariants per run, the locking comparison, one run in detail with its fault windows | `report` |
 
 Inside `ledger` the code is layered, with a pure domain at the center. Not hexagonal.
 
@@ -220,7 +220,9 @@ The foreign key from `idempotency` to `transfer` is deferred, so step 2 can clai
 
 Timeouts: `STATEMENT_TIMEOUT` on the server, `DB_SOCKET_TIMEOUT_S` (pgjdbc `socketTimeout`) on the client. When Postgres is paused, the server enforces nothing, and only the client-side timeout ends the call with a `503`. The relay and the projector set the same `socketTimeout`, so a paused database never leaves them waiting on a dead socket.
 
-`LEDGER_LOCKING=serializable` replaces step 4 with `SERIALIZABLE` isolation and no row locks. The retry wraps the whole transaction: a `TransactionTemplate` inside a loop catches `ConcurrencyFailureException` (Spring's translation of SQLState `40001`) up to `SERIALIZABLE_RETRIES` times. A catch inside a `@Transactional` method would retry inside a transaction that is already rolled back.
+`LEDGER_LOCKING=serializable` replaces step 4 with `SERIALIZABLE` isolation and no row locks. The retry wraps the whole transaction: a `TransactionTemplate` inside a loop catches `ConcurrencyFailureException` (Spring's translation of SQLState `40001` and `40P01`) up to `SERIALIZABLE_RETRIES` times, with no backoff. A catch inside a `@Transactional` method would retry inside a transaction that is already rolled back. `TransactionPolicy` holds the isolation level and the retry budget, so both locking strategies run through the same `LedgerTransferService`. `ordered` has a budget of zero. Serializable only runs with the correct mode, and `LedgerProperties` refuses any other combination at startup.
+
+Step 7 updates the two balances in account id order, in every mode. Without row locks, those `update`s are the first locks a serializable transaction takes. In request order, two transfers in opposite directions deadlock, and every deadlock waits `deadlock_timeout` (1 s) before Postgres picks a victim. The first `SerializableLockingTest` run took 348 s and ran out of pooled connections. With the updates in id order, the same test takes 2 s. `AccountId` sorts byte by byte, like Postgres sorts `uuid`. `UUID.compareTo` compares signed longs and gives another order.
 
 ### 5.7 Event contract
 
@@ -288,7 +290,7 @@ Workload:
 * `MISMATCH_RATE` of transfers reuse a key with another body. Only keys that already got a definite `201` or `200` are reused. A key whose outcome is still unknown may never have committed, and then the mismatch body would become the transfer in a correct ledger and fail I7 for the wrong reason.
 * `READERS` goroutines read balances for I10. Not built yet, they come with the Porcupine check (§12 Q4).
 
-Every request has its own `CLIENT_TIMEOUT`, not the run's deadline, so the end of the run never cuts a request short. The runner uses only the Go standard library: the ledger, the Docker Engine API and the Toxiproxy API are a few HTTP calls each.
+Every request has its own `CLIENT_TIMEOUT`, not the run's deadline, so the end of the run never cuts a request short. The HTTP client keeps two idle connections per worker. With Go's default of two per host, almost every request opened a new connection, and at about 2,400 requests per second the client ran out of local ports 42 s into a run: thousands of `unknown` answers the ledger never saw. The runner uses only the Go standard library: the ledger, the Docker Engine API and the Toxiproxy API are a few HTTP calls each.
 
 History, one JSON line per event:
 
@@ -351,7 +353,7 @@ End of run: stop the workload, heal everything, write `run.json` with the seed a
 | I10 | Porcupine model of a register per account over transfers and reads (stretch goal) |
 | I11 | `pg_stat_database.deadlocks` for the ledger database is zero. `scripts/chaos.sh` calls `pg_stat_reset()` on that database before the workload |
 
-Output: one line per invariant with pass or fail, a count and up to five examples, a verdict line, plus `report.json` with the verdict and the run settings from `run.json`. The checker knows the **Must fail** set of each mode (§5.12) and judges the run itself: `correct` passes when every invariant passes, a naive mode passes when every invariant in its set fails. Exit code `0` on a passing verdict, `1` otherwise, so `make chaos` and `chaos.yml` need no logic of their own. An unknown `LEDGER_MODE` is an error before anything is loaded.
+Output: one line per invariant with pass or fail, a count and up to five examples, a stats line, a verdict line, plus `report.json` with the verdict, the stats and the run settings from `run.json`. The stats come from `history.jsonl` and `faults.jsonl`, workload only (the funding transfers are left out): distinct keys sent, ok answers per second, p50 and p99 latency of definite answers, answers per second by outcome, the fault windows in seconds from the start, and `xact_commit` and `xact_rollback` of the ledger database. The commit count includes the relay's polling, so the report compares rollbacks against ok answers, not against commits. The checker knows the **Must fail** set of each mode (§5.12) and judges the run itself: `correct` passes when every invariant passes, a naive mode passes when every invariant in its set fails. Exit code `0` on a passing verdict, `1` otherwise, so `make chaos` and `chaos.yml` need no logic of their own. An unknown `LEDGER_MODE` is an error before anything is loaded.
 
 Each invariant is a pure function over a `Snapshot` of the history, both databases and the topic. The loaders are separate. That lets the tests corrupt one field of a clean snapshot per invariant and assert that exactly that invariant fails. The checker connects as `postgres` straight to port 5432 and to Kafka on the `INTERNAL` listener, never through Toxiproxy.
 
@@ -370,12 +372,12 @@ Each invariant is a pure function over a `Snapshot` of the history, both databas
 A naive run passes when the checker fails at least its **Must fail** set. Other failures go in the report but do not change the verdict:
 
 * `no-idempotency` also fails I5. A first attempt times out but commits, the retry posts again and drains the account, and a later retry gets `422` insufficient funds while the key already has a `POSTED` transfer.
-* `read-modify-write` also fails I11. Without the row locks of step 4, the two balance `update`s are the first locks the transaction takes, in request order, so it deadlocks like `unordered-locks`.
-* `read-modify-write` fails I3 only when a lost update lets an account without overdraft overspend, and that depends on `FUNDING_MINOR` against the transfer amounts (§12 Q6).
+* `read-modify-write` fails I3 when a lost update lets an account without overdraft overspend, and that depends on `FUNDING_MINOR` against the transfer amounts (§12 Q6).
+* `read-modify-write` no longer fails I11. The first runs had deadlocks, because the two balance `update`s were the first locks the transaction took, in request order. Since step 7 updates in account id order (§5.6), it loses updates without deadlocking.
 
 Every naive mode also has a Testcontainers test that shows its defect without the chaos runner. `NoIdempotencyModeTest` posts the same key twice. `DualWriteModeTest` reads the event from Kafka and finds no outbox row. `UnorderedLocksModeTest` and `ReadModifyWriteModeTest` hold a row lock in an open transaction, start a transfer on another thread, wait until it blocks in `pg_stat_activity`, then take a second lock for a deadlock, or commit a change to the same balance for a lost update. `TransferConcurrencyTest` runs the same two races on the correct mode and gets no deadlock and no lost update.
 
-First runs, 60 s each unless noted, default settings otherwise:
+First runs, 60 s each unless noted, default settings otherwise, before the balance updates moved to id order. The Phase 5 runs are in §5.14.
 
 | Mode | Scenario | Keys | Verdict |
 |---|---|---|---|
@@ -406,6 +408,33 @@ False positives are caught by the correct mode, which must pass every invariant 
 | Projector killed after commit, before ack | Record replayed | `processed_event` skips it | (none needed) |
 | Postgres paused | Client socket timeout, `503` | Client retries with the same key. Projector backs off without skipping | (none needed) |
 | Bug in posting code | Deferred trigger fails the commit | `500`, transaction rolled back | Fix the bug, no data repair |
+
+### 5.14 Results
+
+`scripts/experiments.sh` runs every mode in its scenario and the locking comparison, 60 s each, 64 workers, the `.env` values otherwise. Keys are the workload keys, without the 20 funding transfers. The runs below are one batch on a laptop. `results/sample` keeps their `report.json`, and the report page reads them.
+
+| Mode | Locking | Scenario | Keys | Faults | ok/s | p99 ms | Verdict |
+|---|---|---|---|---|---|---|---|
+| `correct` | ordered | `all` | 96,180 | 7 | 1,661 | 110 | Every invariant passes |
+| `correct` | serializable | `all` | 24,560 | 7 | 415 | 288 | Every invariant passes, 453 keys never answered |
+| `correct` | ordered | `db-latency`, 8 s faults | 47,797 | 4 | 820 | 143 | Every invariant passes, 254 keys never answered |
+| `no-idempotency` | ordered | `db-latency`, 8 s faults | 46,267 | 5 | 798 | 163 | Fails I4 (2,911), I5 (6), I6 (73), I7 (3,323) |
+| `dual-write` | ordered | `kafka-down` | 9,790 | 7 | 145 | 201 | Fails I8 (1,015), I9 (20) |
+| `unordered-locks` | ordered | `contention` | 2,030 | 0 | 32.5 | 999 | Fails I11 |
+| `read-modify-write` | ordered | `contention` | 133,417 | 0 | 2,316 | 80 | Fails I2 (20), I3 (5) |
+
+Locking under contention, `correct` mode, no faults:
+
+| Accounts | Locking | ok/s | p50 ms | p99 ms | Rollbacks | Unknown answers |
+|---|---|---|---|---|---|---|
+| 20 | ordered | 1,914 | 29 | 104 | 0 | 0 |
+| 20 | serializable | 956 | 47 | 195 | 121,093 | 7,343 |
+| 200 | ordered | 2,797 | 21 | 59 | 0 | 0 |
+| 200 | serializable | 2,089 | 27 | 91 | 33,314 | 54 |
+
+Ordered `for update` wins at both contention levels. With 20 accounts, serializable rolls back about two transactions per ok answer and answers half as many transfers per second. Its unknown answers are `503`s after `SERIALIZABLE_RETRIES` ran out, which the client retries with the same key, so the invariants still hold. With 200 accounts fewer transfers touch the same rows, and the gap shrinks. Ordered locks never roll back for contention: a transfer waits for the row instead of doing the work and throwing it away. Under faults the gap is wider: on `all`, serializable answered a quarter of what ordered did.
+
+`read-modify-write` is faster than the correct mode, 2,316 against 1,914 ok/s, because it holds no locks while it reads. It is also wrong.
 
 ---
 
@@ -453,7 +482,7 @@ ledger-chaos/
 │   │       │   │   ├── TransferServiceConfig.java   one line per mode: which claim, load and publish steps
 │   │       │   │   ├── TransferSteps.java           record of the three steps a mode can swap
 │   │       │   │   ├── LedgerTransferService.java   the transaction of §5.6 over the steps
-│   │       │   │   └── SerializableTransferService.java   Phase 5
+│   │       │   │   └── TransactionPolicy.java       isolation level and retry budget per locking strategy
 │   │       │   ├── messaging/
 │   │       │   │   └── DirectPublisher.java         dual-write only: send after commit, no outbox
 │   │       │   └── persistence/                     JdbcClient stores
@@ -467,6 +496,7 @@ ledger-chaos/
 │   │           ├── domain/LedgerPropertyTest.java   jqwik
 │   │           ├── app/TransferConcurrencyTest.java Testcontainers, virtual threads, parallel duplicate keys, lock races
 │   │           ├── app/*ModeTest.java               one per naive mode, its defect without the chaos runner
+│   │           ├── app/SerializableLockingTest.java contention, overspend and duplicate keys without row locks
 │   │           ├── persistence/PostingTriggersTest.java   sum-zero and append-only triggers
 │   │           ├── api/TransferControllerTest.java  port 0, every row of §5.5 except 503
 │   │           ├── api/AccountControllerTest.java
@@ -510,14 +540,16 @@ ledger-chaos/
 │   ├── main.go                      quiet wait, load, check, print, report.json
 │   ├── invariants.go                pure checks over a Snapshot
 │   ├── verdict.go                   Must fail set per mode, pass or fail of the run
+│   ├── stats.go                     throughput, latency, answers per second, fault windows
 │   ├── history.go
 │   ├── db.go                        pgx loaders for both databases
 │   ├── topic.go                     franz-go, reads ledger.transfers from the start, offsets and lag
 │   ├── linearizability.go           Porcupine, stretch goal
 │   └── *_test.go                    one corruption per invariant, loaders against the compose stack
-├── report/                          React, Vite, Recharts, nginx
+├── report/                          React, Vite, Recharts, nginx. Reads every results/sample/*/report.json at build time
 ├── scripts/
-│   └── chaos.sh                     one mode and scenario per call
+│   ├── chaos.sh                     one mode and scenario per call
+│   └── experiments.sh               every mode in its scenario, and the locking comparison
 ├── results/
 │   └── sample/
 ├── docs/
@@ -595,6 +627,9 @@ POSTGRES_VERSION=18.6
 KAFKA_VERSION=4.4.0
 TOXIPROXY_VERSION=2.13.0
 FLYWAY_VERSION=12.4.0
+NODE_VERSION=26
+NGINX_VERSION=1.31
+REPORT_PORT=8090
 
 APP_CPUS=2
 APP_MEMORY_MB=1536
@@ -654,7 +689,7 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 | Architecture | Domain has no Spring or JDBC imports | `ArchitectureTest` |
 | Chaos | Short run per mode and scenario | `chaos.yml` |
 
-`chaos.yml` runs a matrix of modes, each with the scenario from §5.12, plus `correct` on `all` and on `db-latency` with the long fault, the only run where I6 has keys to check in the correct mode. Every job passes when the checker's verdict passes (§5.11). A naive mode that stops failing means the checker or the scenario lost its teeth.
+`chaos.yml` runs a matrix of modes, each with the scenario from §5.12, plus `correct` on `all` with each locking strategy and on `db-latency` with the long fault, the only run where I6 has keys to check in the correct mode. Every job passes when the checker's verdict passes (§5.11). A naive mode that stops failing means the checker or the scenario lost its teeth.
 
 ---
 
@@ -708,7 +743,7 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 | Q3 | Postgres replica and failover? | Tests lost commits after promotion, a real finding. | No, single node. |
 | Q4 | Porcupine check in v1? | Strong result, more work. | Stretch goal. |
 | Q5 | Number of accounts for contention? | Too few and every transfer waits, too many and nothing collides. | 20, adjusted after the first runs. |
-| Q6 | `FUNDING_MINOR` per account? | Too high and nothing is ever rejected, too low and most transfers fail. It also decides whether `read-modify-write` breaks I3. | 100000 per account with amounts up to 5000, a first guess. The first 30 s contention run had 759 insufficient-funds rejections against 51,594 ok answers. `read-modify-write` did not break I3 in its first 60 s contention run: lost updates left stored balances far from the postings, but no posting sum went below zero. |
+| Q6 | `FUNDING_MINOR` per account? | Too high and nothing is ever rejected, too low and most transfers fail. It also decides whether `read-modify-write` breaks I3. | 100000 per account with amounts up to 5000, a first guess. The first 30 s contention run had 759 insufficient-funds rejections against 51,594 ok answers. `read-modify-write` did not break I3 in its first 60 s contention run, which deadlocked most of the time. Without the deadlocks it sent 133,417 transfers in 60 s and broke I3 on 5 accounts (§5.14). |
 
 ---
 

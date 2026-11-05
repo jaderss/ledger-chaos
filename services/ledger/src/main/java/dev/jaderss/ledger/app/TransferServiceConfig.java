@@ -25,7 +25,17 @@ class TransferServiceConfig {
             KafkaTemplate<String, String> kafka,
             JsonMapper json) {
         var direct = new DirectPublisher(kafka, json, properties.topic());
-        return new LedgerTransferService(transactionManager, stores, steps(properties.mode(), stores, direct));
+        var steps = steps(properties.mode(), stores, direct);
+        return switch (properties.locking()) {
+            case ORDERED ->
+                new LedgerTransferService(transactionManager, stores, steps, TransactionPolicy.readCommitted());
+            case SERIALIZABLE ->
+                new LedgerTransferService(
+                        transactionManager,
+                        stores,
+                        new TransferSteps(steps.claim(), stores.accounts()::readWithoutLock, steps.publish()),
+                        TransactionPolicy.serializable(properties.serializableRetries()));
+        };
     }
 
     private static TransferSteps steps(Mode mode, LedgerStores stores, DirectPublisher direct) {

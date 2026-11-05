@@ -99,6 +99,7 @@ services:
       POOL_SIZE: ${POOL_SIZE:-20}
       LEDGER_MODE: ${LEDGER_MODE:-correct}
       LEDGER_LOCKING: ${LEDGER_LOCKING:-ordered}
+      SERIALIZABLE_RETRIES: ${SERIALIZABLE_RETRIES:-5}
       KAFKA_BOOTSTRAP: toxiproxy:19092
       KAFKA_MAX_BLOCK_MS: ${KAFKA_MAX_BLOCK_MS:-3000}
       KAFKA_REQUEST_TIMEOUT_MS: ${KAFKA_REQUEST_TIMEOUT_MS:-3000}
@@ -199,6 +200,17 @@ services:
       DB_LATENCY: ${DB_LATENCY:-}
       SEED: ${SEED:-}
 
+  report:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: report/Dockerfile
+      args:
+        NODE_VERSION: ${NODE_VERSION:-26}
+        NGINX_VERSION: ${NGINX_VERSION:-1.31}
+    image: ledger-chaos/report
+    ports: ["${REPORT_PORT:-8090}:80"]
+
   checker:
     profiles: [tools]
     build:
@@ -211,6 +223,7 @@ services:
     environment:
       RUN_DIR: /results/${RUN_ID:-local}
       LEDGER_MODE: ${LEDGER_MODE:-correct}
+      LEDGER_LOCKING: ${LEDGER_LOCKING:-ordered}
       QUIET_TIMEOUT: ${QUIET_TIMEOUT:-60s}
       LEDGER_DSN: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ledger
       PROJECTOR_DSN: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/projector

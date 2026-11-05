@@ -42,6 +42,8 @@ type Snapshot struct {
 	TransferPostings  map[string]map[string]int64
 	Outbox            []OutboxRow
 	Deadlocks         int64
+	Commits           int64
+	Rollbacks         int64
 	Events            []Event
 	DeadLetters       int64
 	ProjectorBalances map[string]int64

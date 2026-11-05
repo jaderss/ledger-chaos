@@ -99,12 +99,14 @@ func TestRunPassesACleanSystemAndWritesTheReport(t *testing.T) {
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, "report.json"))
 	var report struct {
+		Locking string         `json:"locking"`
+		Stats   Stats          `json:"stats"`
 		OK      bool           `json:"ok"`
 		Quiet   bool           `json:"quiet"`
 		Run     map[string]any `json:"run"`
 		Results []Result       `json:"results"`
 	}
-	if err := json.Unmarshal(data, &report); err != nil || !report.OK || !report.Quiet || report.Run["seed"] != 7.0 || len(report.Results) != 10 {
+	if err := json.Unmarshal(data, &report); err != nil || !report.OK || !report.Quiet || report.Locking != "ordered" || report.Stats.OK != 1 || report.Run["seed"] != 7.0 || len(report.Results) != 10 {
 		t.Fatalf("unexpected report %s", data)
 	}
 }

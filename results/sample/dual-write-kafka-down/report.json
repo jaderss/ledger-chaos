@@ -1,0 +1,558 @@
+{
+  "mode": "dual-write",
+  "locking": "ordered",
+  "mustFail": [
+    "I8",
+    "I9"
+  ],
+  "ok": true,
+  "verdict": "dual-write fails I8, I9, and must fail I8, I9",
+  "quiet": true,
+  "quietDetail": "0 unpublished outbox rows, projector lag 0",
+  "results": [
+    {
+      "id": "I1",
+      "rule": "sum of all postings per currency is zero",
+      "pass": true,
+      "violations": 0
+    },
+    {
+      "id": "I2",
+      "rule": "each account balance equals the sum of its postings",
+      "pass": true,
+      "violations": 0
+    },
+    {
+      "id": "I3",
+      "rule": "no account without overdraft goes below zero",
+      "pass": true,
+      "violations": 0
+    },
+    {
+      "id": "I4",
+      "rule": "an acknowledged transfer exists exactly once",
+      "pass": true,
+      "violations": 0
+    },
+    {
+      "id": "I5",
+      "rule": "a transfer refused with a definite error does not exist",
+      "pass": true,
+      "violations": 0
+    },
+    {
+      "id": "I6",
+      "rule": "a transfer with unknown outcome exists at most once",
+      "pass": true,
+      "violations": 0
+    },
+    {
+      "id": "I7",
+      "rule": "same key and body give the same answer, another body changes nothing",
+      "pass": true,
+      "violations": 0
+    },
+    {
+      "id": "I8",
+      "rule": "every posted transfer reaches the topic, and only those",
+      "pass": false,
+      "violations": 1015,
+      "examples": [
+        "posted transfer aa87a822-70e0-4a17-a54a-fee2b984fcf8 is not on the topic",
+        "posted transfer db1dcdc4-a615-43e4-bedc-0d07dfec4b1b is not on the topic",
+        "posted transfer c0dd592a-9402-44b9-a2b4-1274230f0356 is not on the topic",
+        "posted transfer 7f50e82e-ff25-4509-ab7d-cd9f5f866265 is not on the topic",
+        "posted transfer 4aa5beae-15ee-4635-91e3-37a1d8aa643b is not on the topic"
+      ]
+    },
+    {
+      "id": "I9",
+      "rule": "projector balances equal the ledger's sums of postings",
+      "pass": false,
+      "violations": 20,
+      "examples": [
+        "account 08bbd43d-9dbe-4d6f-b62e-1a6ceb4a2776 projected 212909, ledger postings sum to 211792",
+        "account 30b2d1f2-eab8-4a96-9fb9-d3dd90f5f2d1 projected 65, ledger postings sum to 7256",
+        "account 5c9a146e-a311-4a71-8379-21464d2c9688 projected 140764, ledger postings sum to 116616",
+        "account 691742bd-5570-42b9-9a76-77c18bb2cd1e projected 157512, ledger postings sum to 199016",
+        "account 6b054b1e-03bc-4cf9-b7f0-73019061ab5c projected 180252, ledger postings sum to 142805"
+      ]
+    },
+    {
+      "id": "I11",
+      "rule": "no transfer transaction ends in a deadlock",
+      "pass": true,
+      "violations": 0
+    }
+  ],
+  "stats": {
+    "seconds": 66.135,
+    "keys": 9790,
+    "attempts": 13388,
+    "ok": 9603,
+    "fail": 162,
+    "unknown": 3623,
+    "okPerSecond": 145.2029938761624,
+    "p50Ms": 47,
+    "p99Ms": 201,
+    "maxMs": 526,
+    "commits": 22350,
+    "rollbacks": 0,
+    "timeline": [
+      {
+        "t": 0,
+        "ok": 539,
+        "fail": 2,
+        "unknown": 0
+      },
+      {
+        "t": 1,
+        "ok": 841,
+        "fail": 5,
+        "unknown": 0
+      },
+      {
+        "t": 2,
+        "ok": 961,
+        "fail": 14,
+        "unknown": 0
+      },
+      {
+        "t": 3,
+        "ok": 1167,
+        "fail": 41,
+        "unknown": 0
+      },
+      {
+        "t": 4,
+        "ok": 1381,
+        "fail": 14,
+        "unknown": 0
+      },
+      {
+        "t": 5,
+        "ok": 1473,
+        "fail": 47,
+        "unknown": 0
+      },
+      {
+        "t": 6,
+        "ok": 1266,
+        "fail": 13,
+        "unknown": 0
+      },
+      {
+        "t": 7,
+        "ok": 1318,
+        "fail": 17,
+        "unknown": 0
+      },
+      {
+        "t": 8,
+        "ok": 657,
+        "fail": 9,
+        "unknown": 0
+      },
+      {
+        "t": 9,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 65
+      },
+      {
+        "t": 10,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 65
+      },
+      {
+        "t": 11,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 65
+      },
+      {
+        "t": 12,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 65
+      },
+      {
+        "t": 13,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 65
+      },
+      {
+        "t": 14,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 65
+      },
+      {
+        "t": 15,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 16,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 17,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 18,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 19,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 20,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 21,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 22,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 23,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 34
+      },
+      {
+        "t": 24,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 32
+      },
+      {
+        "t": 25,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 26,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 27,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 28,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 29,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 30,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 31,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 32,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 33,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 34,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 35,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 36,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 37,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 38,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 39,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 40,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 67
+      },
+      {
+        "t": 41,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 42,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 43,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 56
+      },
+      {
+        "t": 44,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 12
+      },
+      {
+        "t": 45,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 46,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 47,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 67
+      },
+      {
+        "t": 48,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 49,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 50,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 51,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 52,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 66
+      },
+      {
+        "t": 53,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 67
+      },
+      {
+        "t": 54,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 67
+      },
+      {
+        "t": 55,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 56,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 57,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 58,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 59,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 70
+      },
+      {
+        "t": 60,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 70
+      },
+      {
+        "t": 61,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 62,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 63,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 0
+      },
+      {
+        "t": 64,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 65,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 68
+      },
+      {
+        "t": 66,
+        "ok": 0,
+        "fail": 0,
+        "unknown": 3
+      }
+    ],
+    "faults": [
+      {
+        "fault": "kafka-down",
+        "start": 8,
+        "end": 11.153
+      },
+      {
+        "fault": "kafka-down",
+        "start": 16.001,
+        "end": 19.197
+      },
+      {
+        "fault": "kafka-down",
+        "start": 24.001,
+        "end": 27.167
+      },
+      {
+        "fault": "kafka-down",
+        "start": 32.002,
+        "end": 35.197
+      },
+      {
+        "fault": "kafka-down",
+        "start": 40.003,
+        "end": 43.201
+      },
+      {
+        "fault": "kafka-down",
+        "start": 48.004,
+        "end": 51.207
+      },
+      {
+        "fault": "kafka-down",
+        "start": 56.003,
+        "end": 59.204
+      }
+    ]
+  },
+  "run": {
+    "accounts": 20,
+    "amountMaxMinor": 5000,
+    "clientTimeout": "1s",
+    "duration": "1m0s",
+    "endedAt": "2026-11-05T17:38:33Z",
+    "faults": [
+      "kafka-down"
+    ],
+    "fundingMinor": 100000,
+    "scenario": "kafka-down",
+    "seed": 1793900246765392100,
+    "startedAt": "2026-11-05T17:37:27Z",
+    "workers": 64
+  }
+}

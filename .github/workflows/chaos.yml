@@ -12,13 +12,14 @@ permissions:
 
 jobs:
   chaos:
-    name: ${{ matrix.mode }} / ${{ matrix.scenario }}
+    name: ${{ matrix.mode }}${{ matrix.locking && format(' ({0})', matrix.locking) || '' }} / ${{ matrix.scenario }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
           - { mode: correct, scenario: all, interval: 8s, fault: 3s }
+          - { mode: correct, locking: serializable, scenario: all, interval: 8s, fault: 3s }
           - { mode: correct, scenario: db-latency, interval: 12s, fault: 8s }
           - { mode: no-idempotency, scenario: db-latency, interval: 12s, fault: 8s }
           - { mode: dual-write, scenario: kafka-down, interval: 8s, fault: 3s }
@@ -30,10 +31,11 @@ jobs:
         run: >-
           make chaos MODE=${{ matrix.mode }} SCENARIO=${{ matrix.scenario }} DURATION=60s
           FAULT_INTERVAL=${{ matrix.interval }} FAULT_DURATION=${{ matrix.fault }} RUN_ID=ci
+          LEDGER_LOCKING=${{ matrix.locking || 'ordered' }}
       - if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.mode }}-${{ matrix.scenario }}
+          name: ${{ matrix.mode }}-${{ matrix.locking || 'ordered' }}-${{ matrix.scenario }}
           path: results/ci
       - if: always()
         run: make down

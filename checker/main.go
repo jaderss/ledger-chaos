@@ -40,6 +40,7 @@ func run(out io.Writer) (bool, error) {
 	topic, dlt, group := getenv("TOPIC", "ledger.transfers"), getenv("DLT_TOPIC", "ledger.transfers.DLT"), getenv("GROUP", "projector")
 	ctx := context.Background()
 	s := Snapshot{Mode: getenv("LEDGER_MODE", "correct")}
+	locking := getenv("LEDGER_LOCKING", "ordered")
 	if err := knownMode(s.Mode); err != nil {
 		return false, err
 	}
@@ -83,11 +84,22 @@ func run(out io.Writer) (bool, error) {
 		return false, err
 	}
 
+	stats, err := runStats(runDir)
+	if err != nil {
+		return false, fmt.Errorf("stats: %w", err)
+	}
+	stats.Commits, stats.Rollbacks = s.Commits, s.Rollbacks
+
 	results := Check(s)
 	Print(out, s, results)
+	fmt.Fprintf(out, "%.0f ok/s over %.0f s, p50 %d ms, p99 %d ms, %d commits, %d rollbacks, %d faults\n",
+		stats.OKPerSecond, stats.Seconds, stats.P50Ms, stats.P99Ms, stats.Commits, stats.Rollbacks, len(stats.Faults))
 	ok, verdict := Verdict(s.Mode, results)
 	fmt.Fprintln(out, "verdict:", verdict)
-	return ok, writeReport(runDir, s, results, ok, verdict)
+	return ok, writeReport(runDir, report{
+		Mode: s.Mode, Locking: locking, MustFail: mustFail[s.Mode], OK: ok, Verdict: verdict,
+		Quiet: s.Quiet, QuietDetail: s.QuietDetail, Results: results, Stats: stats,
+	})
 }
 
 func waitQuiet(ctx context.Context, ledger *pgx.Conn, kafka *Kafka, group, topic string, timeout time.Duration) (bool, string) {
@@ -136,16 +148,36 @@ func Print(out io.Writer, s Snapshot, results []Result) {
 	}
 }
 
-func writeReport(runDir string, s Snapshot, results []Result, ok bool, verdict string) error {
-	report := map[string]any{
-		"mode": s.Mode, "mustFail": mustFail[s.Mode], "ok": ok, "verdict": verdict,
-		"quiet": s.Quiet, "quietDetail": s.QuietDetail, "results": results,
+type report struct {
+	Mode        string         `json:"mode"`
+	Locking     string         `json:"locking"`
+	MustFail    []string       `json:"mustFail"`
+	OK          bool           `json:"ok"`
+	Verdict     string         `json:"verdict"`
+	Quiet       bool           `json:"quiet"`
+	QuietDetail string         `json:"quietDetail"`
+	Results     []Result       `json:"results"`
+	Stats       Stats          `json:"stats"`
+	Run         map[string]any `json:"run,omitempty"`
+}
+
+func runStats(runDir string) (Stats, error) {
+	history, err := os.Open(filepath.Join(runDir, "history.jsonl"))
+	if err != nil {
+		return Stats{}, err
 	}
+	defer history.Close()
+	faults, err := os.Open(filepath.Join(runDir, "faults.jsonl"))
+	if err != nil {
+		return ReadStats(history, nil)
+	}
+	defer faults.Close()
+	return ReadStats(history, faults)
+}
+
+func writeReport(runDir string, report report) error {
 	if data, err := os.ReadFile(filepath.Join(runDir, "run.json")); err == nil {
-		var run map[string]any
-		if json.Unmarshal(data, &run) == nil {
-			report["run"] = run
-		}
+		_ = json.Unmarshal(data, &report.Run)
 	}
 	f, err := os.Create(filepath.Join(runDir, "report.json"))
 	if err != nil {

@@ -3,14 +3,18 @@ export
 
 COMPOSE := docker compose
 
-.PHONY: help up ledger services chaos test-go down clean test test-java
+.PHONY: help up ledger services chaos chaos-all sample report report-dev test-go down clean test test-java
 
 help:
 	@echo "make up      start Postgres, Kafka and Toxiproxy, create roles, databases and topics"
 	@echo "make ledger  build and start the ledger behind Toxiproxy on port 8080"
 	@echo "make services  ledger, relay and projector, all behind Toxiproxy"
 	@echo "make chaos MODE=correct SCENARIO=kills   one chaos run and the checker, results in results/<run>"
-	@echo "make test    Maven verify for the services"
+	@echo "make chaos-all   every mode and the locking comparison, results in results/<prefix>-<run>"
+	@echo "make sample RUNS='a b'   copy those runs' report.json into results/sample for the report page"
+	@echo "make report  build and serve the report page from results/sample on http://localhost:$(REPORT_PORT)"
+	@echo "make report-dev   report page with live reload over every run in results"
+	@echo "make test    Maven verify for the services and the Go tests"
 	@echo "make down    stop everything"
 	@echo "make clean   stop everything, drop volumes and results"
 
@@ -27,6 +31,18 @@ services: up
 
 chaos:
 	scripts/chaos.sh $(or $(MODE),correct) $(or $(SCENARIO),contention)
+
+chaos-all:
+	scripts/experiments.sh
+
+sample:
+	for r in $(RUNS); do mkdir -p results/sample/$$r && cp results/$$r/report.json results/sample/$$r/; done
+
+report:
+	$(COMPOSE) --profile tools up -d --build report
+
+report-dev:
+	cd report && npm install --no-audit --no-fund && RESULTS_DIR=../results npm run dev
 
 test: test-java test-go
 

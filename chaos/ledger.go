@@ -31,8 +31,11 @@ type LedgerClient struct {
 	http *http.Client
 }
 
-func NewLedgerClient(base string) *LedgerClient {
-	return &LedgerClient{base: base, http: &http.Client{}}
+func NewLedgerClient(base string, conns int) *LedgerClient {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = conns
+	transport.MaxIdleConnsPerHost = conns
+	return &LedgerClient{base: base, http: &http.Client{Transport: transport}}
 }
 
 func (l *LedgerClient) CreateAccount(ctx context.Context, id, currency string, overdraft bool) error {
@@ -47,6 +50,7 @@ func (l *LedgerClient) CreateAccount(ctx context.Context, id, currency string, o
 		return err
 	}
 	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, res.Body)
 	if res.StatusCode != http.StatusCreated && res.StatusCode != http.StatusOK {
 		return fmt.Errorf("create account %s: status %d", id, res.StatusCode)
 	}

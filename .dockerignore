@@ -1,0 +1,5 @@
+*
+!report
+!results/sample
+report/node_modules
+report/dist

@@ -56,7 +56,8 @@ func loadLedger(ctx context.Context, db *pgx.Conn, s *Snapshot) error {
 		return err
 	}
 	return db.QueryRow(ctx,
-		"select deadlocks from pg_stat_database where datname = current_database()").Scan(&s.Deadlocks)
+		"select deadlocks, xact_commit, xact_rollback from pg_stat_database where datname = current_database()").
+		Scan(&s.Deadlocks, &s.Commits, &s.Rollbacks)
 }
 
 func loadProjector(ctx context.Context, db *pgx.Conn, s *Snapshot) error {

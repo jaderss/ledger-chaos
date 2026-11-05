@@ -30,8 +30,10 @@ jobs:
             docker run --rm -v "$PWD/$m":/src -w /src golang:1.27 sh -c 'test -z "$(gofmt -l .)" && go vet ./...' || exit 1
           done
           make test-go
+      - name: Report lint
+        run: docker run --rm -v "$PWD/report":/app -w /app node:26-slim sh -c 'npm ci --ignore-scripts && npm run lint'
       - name: Images build
-        run: docker compose --profile tools build ledger relay projector chaos checker
+        run: docker compose --profile tools build ledger relay projector chaos checker report
       - name: SonarQube Cloud
         if: ${{ env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0

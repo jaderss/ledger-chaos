@@ -47,7 +47,7 @@ func run() error {
 	}
 
 	workload := &Workload{
-		ledger: NewLedgerClient(cfg.LedgerURL), log: history, currency: "EUR", workers: cfg.Workers,
+		ledger: NewLedgerClient(cfg.LedgerURL, 2*cfg.Workers), log: history, currency: "EUR", workers: cfg.Workers,
 		retries: cfg.Retries, clientTimeout: cfg.ClientTimeout, amountMax: cfg.AmountMax,
 		duplicateRate: cfg.DuplicateRate, mismatchRate: cfg.MismatchRate, seed: cfg.Seed,
 	}
