@@ -90,7 +90,7 @@ Each mode is one line in `TransferServiceConfig`, so the diff from the correct m
 | I9 | Projector balances equal the ledger's sums of postings |
 | I11 | No transfer transaction ends in a deadlock |
 
-I10 (linearizable balance reads) is not built yet.
+I10 (linearizable balance reads) is not built yet. [docs/INVARIANTS.md](docs/INVARIANTS.md) shows how the checker tests each rule, with a real failure for each.
 
 ## Run it
 
@@ -119,6 +119,7 @@ Scenarios: `contention`, `db-latency`, `kafka-down`, `kills`, `db-faults`, `all`
 | `services/checker` | Invariant checks over both databases, the topic and the history, plain Java with Jdbi |
 | `report` | Results page: every run, invariants per run, the locking comparison, faults over time |
 | `results/sample` | The `report.json` of the runs above |
+| `docs/INVARIANTS.md` | Each invariant, the query that checks it, the mode that breaks it |
 | `docs/SDD.md` | Design, algorithms, fault catalog, versions |
 
 ## What it skips
