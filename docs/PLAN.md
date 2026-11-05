@@ -110,7 +110,39 @@ Done when: each naive mode fails at least its expected invariants in its scenari
 
 Done when: each mode has a result row with transfers sent, faults injected, violations found.
 
-### Phase 6: Write-up and launch
+### Phase 6: One language, Jdbi for every database call
+
+The chaos runner and the checker move from Go to Java 25, and every database call moves from Spring's `JdbcClient` and `TransactionTemplate` to Jdbi. Go was never a decision with a reason: the only Go-only library, Porcupine, is not used yet, and a second language costs a toolchain in containers, two coverage setups and a second idiom for readers.
+
+Stack:
+
+* `chaos` and `checker` are plain Java modules under `services/`, no Spring context. Workers on virtual threads, `java.net.http.HttpClient` on HTTP/1.1, the Docker Engine API over `UnixDomainSocketAddress`.
+* Jdbi 3.55.0 (`jdbi3-core`, `jdbi3-postgres`) in the three services and the checker. Jdbi owns the transactions: `inTransaction` with the isolation level, `afterCommit` on the handle, retries on SQLState `40001` and `40P01`.
+* WireMock 3.13.2, test scope, for resets, empty responses and delays in the runner's client tests.
+* ArchUnit: no `org.springframework.jdbc`, `dao` or `transaction` imports anywhere, and the checker imports no service code and no Spring.
+
+Library decisions, with the criterion: real value, active, secure, small footprint, less boilerplate.
+
+| Library | Decision | Why |
+|---|---|---|
+| Jdbi 3.55.0 (2026-09-27) | Adopt | One fluent chain per query, rows to records, explicit transactions. 1.1 MB, two small dependencies |
+| WireMock 3.13.2 (2025-11-14) | Adopt, tests only | Built-in connection resets and empty responses, the cases the runner must classify as unknown |
+| Spring Boot for the tools | Reject | Two databases in the checker undo most of what it saves. A config record replaces it |
+| `docker-java-core` 3.7.1 | Reject | Jackson 2, Guava and BouncyCastle for seven endpoints |
+| `jdbi3-spring`, `jdbi3-sqlobject` | Reject | One transaction model, and the SQL stays visible in text blocks |
+| Picocli 4.7.7, Failsafe 3.3.2 | Reject | No arguments to parse, and both without a release in over a year |
+
+Commits, in this order. The services move first while the Go checker still judges them, so the system and the oracle never change in the same step:
+
+1. Ledger, relay and projector on Jdbi, behavior unchanged. Every test asserts what it asserted before, and the Go checker passes the correct mode on `all` and fails each naive mode on its set.
+2. `checker` in Java. Each corruption test ported one to one, stats equal to the Go checker on the same histories.
+3. `chaos` in Java.
+4. Go removed from the Makefile, CI, `.env` and Sonar.
+5. A new experiment batch, `results/sample`, and the README and SDD tables from it.
+
+Done when: no Go in the repo, `./mvnw verify` runs every test, and the new batch gives every mode its expected verdict.
+
+### Phase 7: Write-up and launch
 
 * README opens with the result table: correct mode with zero violations, naive modes with what they lost.
 * `docs/INVARIANTS.md` explains each rule with the SQL that checks it.
@@ -128,11 +160,11 @@ Done when: README and posts reviewed by Jader.
 | `java-code-review` (`/code-review`) | Panel review per part, with the financial compliance lens. | Before each part merges |
 | `engineering:system-design` | Check the event flow and the failure table before Phase 2. | Phase 1 end |
 | `engineering:testing-strategy` | Split between property, Testcontainers and chaos tests. | Phase 1 |
-| `security-review` | Input validation on the API, secrets, workflow permissions. | Phase 6 |
+| `security-review` | Input validation on the API, secrets, workflow permissions. | Phase 7 |
 | `simplify` | Keep the naive modes small and obvious. | Phase 4 |
 | `dataviz` | Report page charts and colors. | Phase 5 |
-| `tech-design-writer` | `SDD.md`, `INVARIANTS.md`. | Phases 0 and 6 |
-| `jader-voice` | README, commit messages, posts. | Every phase, final pass in Phase 6 |
+| `tech-design-writer` | `SDD.md`, `INVARIANTS.md`. | Phases 0 and 7 |
+| `jader-voice` | README, commit messages, posts. | Every phase, final pass in Phase 7 |
 | `run` | Start the stack and confirm a change works. | Any phase |
 
 ---

@@ -555,7 +555,7 @@ ledger-chaos/
 ├── docs/
 │   ├── PLAN.md
 │   ├── SDD.md
-│   └── INVARIANTS.md                written in Phase 6
+│   └── INVARIANTS.md                written in Phase 7
 └── .github/workflows/
     ├── ci.yml                       build, tests, sonar
     └── chaos.yml                    short chaos per mode, on push to main and nightly
