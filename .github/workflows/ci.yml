@@ -40,9 +40,9 @@ jobs:
           cache: maven
       - name: Build, test, format and coverage
         working-directory: services
-        run: ./mvnw -B verify dependency:copy-dependencies -DincludeScope=compile -pl ledger -am
-      - name: Ledger image builds
-        run: docker compose build ledger
+        run: ./mvnw -B verify dependency:copy-dependencies -DincludeScope=compile
+      - name: Service images build
+        run: docker compose build ledger relay projector
       - name: SonarQube Cloud
         if: ${{ env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0

@@ -217,7 +217,7 @@ One transaction, `READ COMMITTED`.
 
 The foreign key from `idempotency` to `transfer` is deferred, so step 2 can claim the key before the transfer row exists.
 
-Timeouts: `STATEMENT_TIMEOUT` on the server, `DB_SOCKET_TIMEOUT_S` (pgjdbc `socketTimeout`) on the client. When Postgres is paused, the server enforces nothing, and only the client-side timeout ends the call with a `503`.
+Timeouts: `STATEMENT_TIMEOUT` on the server, `DB_SOCKET_TIMEOUT_S` (pgjdbc `socketTimeout`) on the client. When Postgres is paused, the server enforces nothing, and only the client-side timeout ends the call with a `503`. The relay and the projector set the same `socketTimeout`, so a paused database never leaves them waiting on a dead socket.
 
 `LEDGER_LOCKING=serializable` replaces step 4 with `SERIALIZABLE` isolation and no row locks. The retry wraps the whole transaction: a `TransactionTemplate` inside a loop catches `ConcurrencyFailureException` (Spring's translation of SQLState `40001`) up to `SERIALIZABLE_RETRIES` times. A catch inside a `@Transactional` method would retry inside a transaction that is already rolled back.
 
@@ -256,21 +256,25 @@ update outbox set published_at = now() where id = any(:ids);
 commit;
 ```
 
-A crash after the send and before the commit republishes the batch. That is expected and covered by the projector. `SKIP LOCKED` lets more than one relay run without double claiming a row.
+A crash after the send and before the commit republishes the batch. That is expected and covered by the projector. `SKIP LOCKED` lets more than one relay run without double claiming a row. The relay selects every unpublished row, not rows above a `seq` cursor: a transaction that commits after one with a higher `seq` would fall behind a cursor and never be sent.
 
-The relay holds the transaction while it waits for acks, so a Kafka outage must not keep it open. Producer `delivery.timeout.ms`, `request.timeout.ms` and `max.block.ms` stay below `idle_in_transaction_session_timeout`, set on the relay's database role. When Kafka is down the send fails inside that limit, the transaction rolls back, the rows stay unpublished, and the next poll tries again.
+The relay sends the payload as stored, with the transfer id as key and the correlation id as a header. It never rebuilds the JSON, so the event on the topic is the one the ledger wrote in the transfer's transaction.
+
+The relay holds the transaction while it waits for acks, so a Kafka outage must not keep it open. Producer `delivery.timeout.ms`, `request.timeout.ms` and `max.block.ms` stay below `idle_in_transaction_session_timeout`, set on the relay's database role. When Kafka is down the send fails inside that limit, the transaction rolls back, the rows stay unpublished, and the next poll tries again. The bound is `KAFKA_MAX_BLOCK_MS + KAFKA_DELIVERY_TIMEOUT_MS < IDLE_IN_TX_TIMEOUT` (3 s + 5 s against 10 s in `.env`), because one batch can block on metadata and then wait for delivery. The relay checks it at startup and refuses to start when it does not hold.
 
 ### 5.9 Projector loop
 
 Per record, one transaction:
 
 1. `insert into processed_event (event_id) values (:id) on conflict do nothing`.
-2. Inserted: upsert each posting into `balance` (`balance_minor = balance.balance_minor + excluded.balance_minor`).
+2. Inserted: upsert each posting into `balance` (`balance_minor = balance.balance_minor + excluded.balance_minor`), in account id order. Events from different partitions run in parallel, and two of them on the same pair of accounts would deadlock if one upserted `from` first and the other `to` first.
 3. Commit, then acknowledge the offset (`AckMode.MANUAL_IMMEDIATE`).
 
 A crash after the commit and before the ack replays the record, and step 1 skips it.
 
-Error handling: the default Spring Kafka `DefaultErrorHandler` retries 9 times, then commits the offset and the event is gone. The projector sets a `DefaultErrorHandler` with an unlimited `ExponentialBackOff` for database errors, so a paused database stops consumption instead of skipping records. Only a record that cannot be parsed goes to `ledger.transfers.DLT`. The checker reads the DLT, and any record there fails I9.
+The consumer group starts with `auto.offset.reset=earliest`. `session.timeout.ms` is `KAFKA_SESSION_TIMEOUT_MS` (10 s), not the Kafka default of 45 s. A killed projector cannot leave the group, so its partitions stay with the dead member until the session times out, and 45 s against a `QUIET_TIMEOUT` of 60 s would fail I9 after a late `kill-projector` for no real reason. With Kafka's default, `latest`, a projector that joins after the first events skips them, and I9 fails for a reason that has nothing to do with the patterns.
+
+Error handling: the default Spring Kafka `DefaultErrorHandler` retries 9 times, then commits the offset and the event is gone. The projector sets a `DefaultErrorHandler` with an unlimited `ExponentialBackOff` for database errors, so a paused database stops consumption instead of skipping records. Only a record that cannot be parsed goes to `ledger.transfers.DLT`. Not parsed includes an event whose postings do not sum to zero: `TransferPosted` refuses it in its constructor, because retrying it can never succeed. The checker reads the DLT, and any record there fails I9. A record that parses but that Postgres refuses stays in the backoff loop and is logged with its transfer id and offset on every retry, so a stuck partition shows up as an I9 quiet timeout with the record named in the projector log.
 
 ### 5.10 Chaos runner
 
@@ -331,7 +335,7 @@ End of run: heal everything, stop the workload, wait until `outbox` has no unpub
 | I5 | Every key with a definite `4xx` and no later `ok` has no `POSTED` transfer with that `request_key`. `idempotency-key-mismatch` answers do not count here, I7 covers them |
 | I6 | Every key with only `unknown` results has zero or one transfer with that `request_key` |
 | I7 | Replays returned the same transfer id and status as the first `ok`. Mismatches returned `422` and no transfer has their body |
-| I8 | Every `POSTED` transfer is on the topic at least once, matched by `transferId`. In `correct` mode also: one outbox row per `POSTED` transfer and none unpublished |
+| I8 | Every `POSTED` transfer is on the topic at least once, matched by `transferId`. Every event on the topic matches a `POSTED` transfer, with the same postings. In `correct` mode also: one outbox row per `POSTED` transfer and none unpublished |
 | I9 | Projector `balance` equals the ledger's sum of postings for every account, and `ledger.transfers.DLT` is empty. An account with no projector row counts as zero. The sum of postings, not `account.balance_minor`, so a wrong stored balance fails I2 only |
 | I10 | Porcupine model of a register per account over transfers and reads (stretch goal) |
 | I11 | `pg_stat_database.deadlocks` for the ledger database is zero. `scripts/chaos.sh` calls `pg_stat_reset()` on that database before the workload |
@@ -359,6 +363,9 @@ A naive run passes when the checker fails at least its **Must fail** set. Other 
 | Client timeout after commit | Client sees `unknown` | Retry with the same key, replay returns the result | (none needed) |
 | Ledger killed mid transaction | Connection drop, Postgres rolls back | Client retries with the same key | (none needed) |
 | Relay killed after send, before mark | Duplicate events on the topic | Projector dedups by `eventId` | (none needed) |
+| Part of a relay batch acked, then one send fails | Send error in the relay | Whole batch rolls back, acked rows go out again with the same `eventId` | (none needed) |
+| Event parses but Postgres refuses it | Projector logs the transfer id and offset on every retry | Partition stops, quiet period times out, I9 fails | Fix the projector, the record is still on the topic |
+| Projector group starts after the first events | (prevented) | `auto.offset.reset=earliest` | (none needed) |
 | Kafka down | Relay send fails within the producer timeouts | Transaction rolls back, outbox rows wait for the next poll | (none needed) |
 | Projector killed after commit, before ack | Record replayed | `processed_event` skips it | (none needed) |
 | Postgres paused | Client socket timeout, `503` | Client retries with the same key. Projector backs off without skipping | (none needed) |
@@ -383,8 +390,8 @@ ledger-chaos/
 ├── services/
 │   ├── pom.xml                      aggregator: ledger, relay, projector
 │   ├── mvnw
+│   ├── Dockerfile                   one for the three services, MODULE build arg
 │   ├── ledger/
-│   │   ├── Dockerfile
 │   │   ├── pom.xml
 │   │   └── src/
 │   │       ├── main/java/dev/jaderss/ledger/
@@ -415,7 +422,7 @@ ledger-chaos/
 │   │       │       ├── AccountStore.java, IdempotencyStore.java, TransferStore.java, PostingStore.java, OutboxStore.java
 │   │       ├── main/resources/
 │   │       │   ├── application.yaml
-│   │       │   └── db/migration/V1__ledger.sql, V2__posting_triggers.sql
+│   │       │   └── db/migration/V1__ledger.sql, V2__posting_triggers.sql, V3__relay_grants.sql
 │   │       └── test/java/dev/jaderss/ledger/
 │   │           ├── domain/MoneyTest.java, TransferDecisionTest.java, RequestHashTest.java
 │   │           ├── domain/LedgerPropertyTest.java   jqwik
@@ -425,17 +432,26 @@ ledger-chaos/
 │   │           ├── api/AccountControllerTest.java
 │   │           └── ArchitectureTest.java            ArchUnit, domain has no framework imports
 │   ├── relay/
-│   │   └── src/main/java/dev/jaderss/relay/
-│   │       ├── Application.java
-│   │       ├── OutboxRelay.java                     scheduled loop
-│   │       └── OutboxStore.java
+│   │   └── src/
+│   │       ├── main/java/dev/jaderss/relay/
+│   │       │   ├── Application.java
+│   │       │   ├── OutboxRelay.java                 scheduled loop, one transaction per batch
+│   │       │   ├── OutboxStore.java                 claim with SKIP LOCKED, mark published
+│   │       │   ├── RelayProperties.java             checks the timeout inequality of §5.8 at startup
+│   │       │   └── ProducerSettings.java            acks=all, idempotence, producer timeouts
+│   │       └── test/java/dev/jaderss/relay/
+│   │           ├── OutboxRelayTest.java             crash between send and mark, parallel batches
+│   │           └── RelayPropertiesTest.java
 │   └── projector/
-│       └── src/main/java/dev/jaderss/projector/
-│           ├── Application.java
-│           ├── TransferPostedListener.java          @KafkaListener, manual ack
-│           ├── KafkaErrorConfig.java                unlimited backoff, DLT only for parse errors
-│           ├── BalanceProjection.java               processed_event and upsert
-│           └── TransferPosted.java                  record, own copy of the contract
+│       └── src/
+│           ├── main/java/dev/jaderss/projector/
+│           │   ├── Application.java
+│           │   ├── TransferPostedListener.java      @KafkaListener, manual ack
+│           │   ├── KafkaErrorConfig.java            unlimited backoff, DLT only for records that do not parse
+│           │   ├── BalanceProjection.java           processed_event and upserts in account id order
+│           │   └── TransferPosted.java              record, own copy of the contract, refuses unbalanced postings
+│           ├── main/resources/db/migration/V1__projector.sql
+│           └── test/java/dev/jaderss/projector/ProjectorTest.java   duplicates, parallel partitions, DLT
 ├── chaos/                           Go
 │   ├── go.mod
 │   ├── main.go
@@ -553,6 +569,8 @@ KAFKA_DELIVERY_TIMEOUT_MS=5000
 KAFKA_REQUEST_TIMEOUT_MS=3000
 KAFKA_MAX_BLOCK_MS=3000
 TOPIC_PARTITIONS=6
+PROJECTOR_CONCURRENCY=3
+KAFKA_SESSION_TIMEOUT_MS=10000
 
 ACCOUNTS=20
 WORKERS=64

@@ -1,14 +1,17 @@
 ARG JAVA_VERSION=25
 
 FROM eclipse-temurin:${JAVA_VERSION}-jdk AS build
+ARG MODULE
 WORKDIR /src
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
 COPY ledger/pom.xml ledger/
-RUN ./mvnw -q -B -pl ledger dependency:go-offline
-COPY ledger/src ledger/src
-RUN ./mvnw -q -B -pl ledger package -DskipTests -Dspotless.check.skip=true -Djacoco.skip=true \
-    && cp ledger/target/ledger-*.jar /app.jar
+COPY relay/pom.xml relay/
+COPY projector/pom.xml projector/
+RUN ./mvnw -q -B -pl ${MODULE} dependency:go-offline
+COPY ${MODULE}/src ${MODULE}/src
+RUN ./mvnw -q -B -pl ${MODULE} package -DskipTests -Dspotless.check.skip=true -Djacoco.skip=true \
+    && cp ${MODULE}/target/${MODULE}-*.jar /app.jar
 
 FROM eclipse-temurin:${JAVA_VERSION}-jre
 COPY --from=build /app.jar /app/app.jar

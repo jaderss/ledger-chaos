@@ -80,9 +80,9 @@ services:
   ledger:
     build:
       context: services
-      dockerfile: ledger/Dockerfile
       args:
         JAVA_VERSION: ${JAVA_VERSION:-25}
+        MODULE: ledger
     image: ledger-chaos/ledger
     depends_on:
       toxiproxy:
@@ -101,6 +101,66 @@ services:
       LEDGER_LOCKING: ${LEDGER_LOCKING:-ordered}
       JAVA_OPTS: -XX:+Use${JVM_GC:-ParallelGC} -XX:MaxRAMPercentage=${HEAP_PERCENT:-75}
     ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  relay:
+    build:
+      context: services
+      args:
+        JAVA_VERSION: ${JAVA_VERSION:-25}
+        MODULE: relay
+    image: ledger-chaos/relay
+    depends_on:
+      ledger:
+        condition: service_healthy
+    cpus: 1
+    mem_limit: 768m
+    environment:
+      DB_HOST: toxiproxy
+      DB_PORT: 15432
+      DB_SOCKET_TIMEOUT_S: ${DB_SOCKET_TIMEOUT_S:-5}
+      RELAY_DB_PASSWORD: ${RELAY_DB_PASSWORD:-relay}
+      KAFKA_BOOTSTRAP: toxiproxy:19092
+      RELAY_BATCH: ${RELAY_BATCH:-100}
+      RELAY_INTERVAL: ${RELAY_INTERVAL:-50ms}
+      IDLE_IN_TX_TIMEOUT: ${IDLE_IN_TX_TIMEOUT:-10s}
+      KAFKA_DELIVERY_TIMEOUT_MS: ${KAFKA_DELIVERY_TIMEOUT_MS:-5000}
+      KAFKA_REQUEST_TIMEOUT_MS: ${KAFKA_REQUEST_TIMEOUT_MS:-3000}
+      KAFKA_MAX_BLOCK_MS: ${KAFKA_MAX_BLOCK_MS:-3000}
+      JAVA_OPTS: -XX:+Use${JVM_GC:-ParallelGC} -XX:MaxRAMPercentage=${HEAP_PERCENT:-75}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  projector:
+    build:
+      context: services
+      args:
+        JAVA_VERSION: ${JAVA_VERSION:-25}
+        MODULE: projector
+    image: ledger-chaos/projector
+    depends_on:
+      toxiproxy:
+        condition: service_started
+      db-init:
+        condition: service_completed_successfully
+    cpus: 1
+    mem_limit: 768m
+    environment:
+      DB_HOST: toxiproxy
+      DB_PORT: 15432
+      DB_SOCKET_TIMEOUT_S: ${DB_SOCKET_TIMEOUT_S:-5}
+      PROJECTOR_DB_PASSWORD: ${PROJECTOR_DB_PASSWORD:-projector}
+      KAFKA_BOOTSTRAP: toxiproxy:19092
+      PROJECTOR_CONCURRENCY: ${PROJECTOR_CONCURRENCY:-3}
+      KAFKA_SESSION_TIMEOUT_MS: ${KAFKA_SESSION_TIMEOUT_MS:-10000}
+      JAVA_OPTS: -XX:+Use${JVM_GC:-ParallelGC} -XX:MaxRAMPercentage=${HEAP_PERCENT:-75}
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
       interval: 2s
