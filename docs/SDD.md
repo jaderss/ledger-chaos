@@ -19,7 +19,7 @@ There is no small, runnable project that injects real faults into a ledger and t
 
 * A ledger with idempotent transfers, outbox, relay and projector.
 * A chaos runner that records every client call and every fault.
-* A checker that verifies invariants I1 to I9 ([PLAN §2](PLAN.md#2-invariants)), I10 as a stretch goal.
+* A checker that verifies invariants I1 to I9 and I11 ([PLAN §2](PLAN.md#2-invariants)), I10 as a stretch goal.
 * Naive modes that break known invariants, so the checker is proven to catch them.
 * One command per scenario, results published, a short chaos run in CI.
 
@@ -172,11 +172,12 @@ Content-Type: application/json
 | Case | Status | Body |
 |---|---|---|
 | New transfer posted | `201` | Transfer with `status: POSTED` |
-| Same key, same body, already done | `200`, header `Idempotent-Replayed: true` | Stored result, `POSTED` or the stored rejection |
+| Same key, same body, transfer posted | `200`, header `Idempotent-Replayed: true` | Stored transfer, `status: POSTED` |
+| Same key, same body, transfer rejected | `422`, header `Idempotent-Replayed: true` | Problem `insufficient-funds`, same as the first answer |
 | Same key, other body | `422` | Problem `idempotency-key-mismatch` |
-| Insufficient funds | `422` | Problem `insufficient-funds`. Stored, so a retry gets the same answer |
-| Currency differs from an account | `422` | Problem `currency-mismatch` |
-| Unknown account | `404` | Problem `account-not-found` |
+| Insufficient funds | `422` | Problem `insufficient-funds`. Stored as a `REJECTED` transfer, so a retry gets the same `422` |
+| Currency differs from an account | `422` | Problem `currency-mismatch`. Not stored |
+| Unknown account | `404` | Problem `account-not-found`. Not stored |
 | Missing or malformed key | `400` | Problem `idempotency-key-required` |
 | Database unavailable or timeout | `503` | Problem `unavailable`. Outcome unknown to the client |
 
@@ -186,6 +187,8 @@ Errors use `ProblemDetail` (RFC 9457), with `type` under `/problems/`.
 
 Other endpoints: `GET /transfers/{id}`, `GET /transfers?idempotencyKey=` (used by the checker for unknown outcomes), `GET /accounts/{id}`, `POST /accounts` (setup only).
 
+`POST /accounts` takes an id, a currency and `allowOverdraft`, never an opening balance. A balance that does not come from postings would break I2. Money enters through one **mint** account per currency, created with `allowOverdraft = true`. Before the faults start, the chaos runner sends one funding transfer of `FUNDING_MINOR` from the mint to each workload account, through `POST /transfers` and recorded in the history like any other call. The mint goes negative by the total funded, so I1 still holds, and the projector sees the funding events like any other. The workload never uses the mint after that.
+
 ### 5.6 Transfer algorithm
 
 One transaction, `READ COMMITTED`.
@@ -193,7 +196,7 @@ One transaction, `READ COMMITTED`.
 1. Hash the request: SHA-256 over the parsed `TransferRequest` fields in a fixed order (`fromAccount`, `toAccount`, `amountMinor`, `currency`). Not the raw body, so whitespace or field order never count as a mismatch.
 2. `insert into idempotency (key, request_hash, transfer_id) values (:key, :hash, :newTransferId) on conflict (key) do nothing returning transfer_id`.
 3. No row returned: load the `idempotency` row and its transfer. Hash equal: return the transfer as a replay. Hash different: `422`. A concurrent duplicate waits on the primary key here until the first transaction ends, then takes this branch. If the first transaction rolled back, the insert succeeds and this request goes on as new.
-4. `select ... from account where id in (:from, :to) order by id for update`. Id order means two transfers on the same pair never deadlock.
+4. `select ... from account where id in (:from, :to) order by id for update`. Id order means two transfers on the same pair never deadlock. An unknown account (`404`) or a currency mismatch (`422`) throws here. The transaction rolls back with the `idempotency` row, so nothing is stored, and a retry gets the same answer because accounts never change currency and are never deleted.
 5. The domain decides: `TransferDecision` is a sealed type with `Post` and `Reject(reason)`.
 6. `Reject`: insert the transfer with `REJECTED`, commit, `422`.
 7. `Post`: insert the transfer with `POSTED`, insert two postings (`-amount`, `+amount`), update both balances with `Math.addExact` results, insert the outbox row, commit, `201`.
@@ -263,7 +266,7 @@ Workload:
 * `WORKERS` goroutines send transfers with random pairs and amounts, each with a new UUID key.
 * Timeout, connection error or `5xx`: record `unknown`, retry with the same key up to `RETRIES` times.
 * `DUPLICATE_RATE` of transfers are sent twice in parallel with the same key.
-* `MISMATCH_RATE` of transfers reuse a key with another body.
+* `MISMATCH_RATE` of transfers reuse a key with another body. Only keys that already got a definite `201` or `200` are reused. A key whose outcome is still unknown may never have committed, and then the mismatch body would become the transfer in a correct ledger and fail I7 for the wrong reason.
 * `READERS` goroutines read balances for I10.
 
 History, one JSON line per event:
@@ -290,6 +293,17 @@ Nemesis: every `FAULT_INTERVAL` it picks a fault from the scenario, applies it f
 
 Docker Engine API through the Unix socket with `net/http`, no Docker SDK.
 
+A **scenario** is a named set of faults for the nemesis. `make chaos MODE=... SCENARIO=...` runs one pair.
+
+| Scenario | Faults | Why it exists |
+|---|---|---|
+| `contention` | (none) | Lock contention only. Breaks `read-modify-write` and `unordered-locks`, and is the baseline for the correct mode |
+| `db-latency` | `db-latency` | Client timeouts on transfers that still commit, so retries hit keys with unknown outcome. Breaks `no-idempotency` on I6 |
+| `kafka-down` | `kafka-down` | Breaks `dual-write`: the transfer commits and the publish fails |
+| `kills` | `kill-ledger`, `kill-relay`, `kill-projector` | Crashes between the steps of §5.6, §5.8 and §5.9 |
+| `db-faults` | `pause-db`, `restart-db`, `db-cut`, `db-reset` | Database gone or slow in every way the catalog has |
+| `all` | Every fault above | Long runs on the laptop and the correct mode in CI |
+
 End of run: heal everything, stop the workload, wait until `outbox` has no unpublished rows and the projector consumer group has no lag, with `QUIET_TIMEOUT` as the limit. A timeout is reported as an I8 or I9 failure.
 
 ### 5.11 Checker
@@ -298,14 +312,15 @@ End of run: heal everything, stop the workload, wait until `outbox` has no unpub
 |---|---|
 | I1 | `select currency, sum(p.amount_minor) from posting p join account a on a.id = p.account_id group by currency` is zero for every currency |
 | I2 | `account.balance_minor` equals the sum of its postings, every account |
-| I3 | No account with `allow_overdraft = false` below zero |
+| I3 | No account with `allow_overdraft = false` has a negative sum of postings. The check constraint already guards the stored balance, so the checker reads the postings, where a lost update shows the overspend |
 | I4 | Every key with an `ok` 201 or 200 `POSTED` in the history has exactly one `POSTED` transfer with that `request_key` |
-| I5 | Every key with a definite `4xx` and no later `ok` has no `POSTED` transfer with that `request_key` |
+| I5 | Every key with a definite `4xx` and no later `ok` has no `POSTED` transfer with that `request_key`. `idempotency-key-mismatch` answers do not count here, I7 covers them |
 | I6 | Every key with only `unknown` results has zero or one transfer with that `request_key` |
 | I7 | Replays returned the same transfer id and status as the first `ok`. Mismatches returned `422` and no transfer has their body |
 | I8 | Every `POSTED` transfer is on the topic at least once, matched by `transferId`. In `correct` mode also: one outbox row per `POSTED` transfer and none unpublished |
-| I9 | Projector `balance` equals ledger `account.balance_minor` for every account, and `ledger.transfers.DLT` is empty |
+| I9 | Projector `balance` equals the ledger's sum of postings for every account, and `ledger.transfers.DLT` is empty. An account with no projector row counts as zero. The sum of postings, not `account.balance_minor`, so a wrong stored balance fails I2 only |
 | I10 | Porcupine model of a register per account over transfers and reads (stretch goal) |
+| I11 | `pg_stat_database.deadlocks` for the ledger database is zero. `scripts/chaos.sh` calls `pg_stat_reset()` on that database before the workload |
 
 Output: one line per invariant with pass or fail and a count, plus `report.json`. Exit code `1` on any failure.
 
@@ -313,13 +328,15 @@ Output: one line per invariant with pass or fail and a count, plus `report.json`
 
 `LEDGER_MODE` selects the `TransferService` bean. One class per mode, small and obviously wrong. Never on by default. `LEDGER_MODE` and `LEDGER_LOCKING` bind to enums in a `LedgerProperties` record with `@ConfigurationProperties` and `@Validated`, so a typo fails startup instead of running the default mode.
 
-| Mode | Change |
-|---|---|
-| `correct` | Algorithm in §5.6 |
-| `no-idempotency` | Skips steps 2 and 3. A retry with the same key posts again, with its own `transfer` row and the same `request_key` |
-| `dual-write` | No outbox row. Publishes to Kafka after the commit from the ledger |
-| `unordered-locks` | Locks `from` then `to` |
-| `read-modify-write` | Reads balances without `for update`, writes computed values |
+| Mode | Change | Scenario | Must fail |
+|---|---|---|---|
+| `correct` | Algorithm in §5.6 | Every scenario | (none) |
+| `no-idempotency` | Skips steps 2 and 3. A retry with the same key posts again, with its own `transfer` row and the same `request_key` | `db-latency` | I4, I6, I7 |
+| `dual-write` | No outbox row. Publishes to Kafka after the commit from the ledger | `kafka-down` | I8, I9 |
+| `unordered-locks` | Locks `from` then `to` | `contention` | I11 |
+| `read-modify-write` | Reads balances without `for update`, writes computed values | `contention` | I2 |
+
+A naive run passes when the checker fails at least its **Must fail** set. Other failures go in the report but do not fail the job: `read-modify-write` also fails I3 when a lost update lets an account without overdraft overspend, and that depends on `FUNDING_MINOR` against the transfer amounts. False positives are caught by the correct mode, which must pass every invariant in every scenario.
 
 ### 5.13 Failure modes of the system
 
@@ -524,6 +541,7 @@ MISMATCH_RATE=0.01
 FAULT_INTERVAL=10s
 FAULT_DURATION=3s
 QUIET_TIMEOUT=60s
+FUNDING_MINOR=
 SEED=
 ```
 
@@ -543,7 +561,7 @@ Kafka sits behind Toxiproxy, so its advertised listener points at the proxy addr
 | Architecture | Domain has no Spring or JDBC imports | `ArchitectureTest` |
 | Chaos | Short run per mode and scenario | `chaos.yml` |
 
-`chaos.yml` runs a matrix of modes. The `correct` job passes when the checker exits `0`. Each naive job passes when the checker exits `1` and the report names the expected invariants. A naive mode that stops failing means the checker or the scenario lost its teeth.
+`chaos.yml` runs a matrix of modes, each with the scenario from §5.12. The `correct` job runs `all` and passes when the checker exits `0`. Each naive job passes when the checker exits `1` and the report names at least its **Must fail** invariants. A naive mode that stops failing means the checker or the scenario lost its teeth.
 
 ---
 
@@ -592,6 +610,7 @@ Kafka sits behind Toxiproxy, so its advertised listener points at the proxy addr
 | Q3 | Postgres replica and failover? | Tests lost commits after promotion, a real finding. | No, single node. |
 | Q4 | Porcupine check in v1? | Strong result, more work. | Stretch goal. |
 | Q5 | Number of accounts for contention? | Too few and every transfer waits, too many and nothing collides. | 20, adjusted after the first runs. |
+| Q6 | `FUNDING_MINOR` per account? | Too high and nothing is ever rejected, too low and most transfers fail. It also decides whether `read-modify-write` breaks I3. | Unset, picked after the first runs. |
 
 ---
 

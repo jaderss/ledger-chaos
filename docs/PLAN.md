@@ -22,14 +22,15 @@ The project is about these rules. Every phase adds a way to break them and a way
 |---|---|---|
 | I1 | The sum of all postings per currency is zero. | Checker, SQL |
 | I2 | Each account balance equals the sum of its postings. | Checker, SQL |
-| I3 | No account without overdraft goes below zero. | Database constraint and checker |
+| I3 | No account without overdraft goes below zero. | Database constraint on the stored balance, checker on the sum of postings |
 | I4 | A transfer acknowledged to the client exists exactly once. | Checker against the client history |
 | I5 | A transfer refused with a definite error does not exist. | Checker against the client history |
 | I6 | A transfer with unknown outcome (timeout, reset) exists at most once. | Checker, lookup by idempotency key |
 | I7 | Same key and same body give the same answer. Same key and another body give `422` and change nothing. | Checker against the client history |
 | I8 | Every posted transfer reaches the topic once the system is quiet. In the correct mode it goes through exactly one outbox row. | Checker, SQL and Kafka |
-| I9 | Projector balances equal ledger balances once the system is quiet. | Checker |
+| I9 | Projector balances equal the ledger's sums of postings once the system is quiet. | Checker |
 | I10 | Reads of an account balance are linearizable. | Porcupine over the history (stretch goal) |
+| I11 | No transfer transaction ends in a deadlock. | Checker, `pg_stat_database` |
 
 ---
 
@@ -83,7 +84,8 @@ Done when: I8 and I9 hold in integration tests with forced duplicates.
 * `chaos` sends transfers with idempotency keys, retries timeouts with the same key, records every call as invoke, ok, fail or unknown.
 * Faults through the Docker Engine API (kill, stop, pause) and the Toxiproxy API (latency, reset, cut).
 * `checker` reads the history and the final state, prints one line per invariant, exits non-zero on any violation.
-* `make chaos SCENARIO=...` runs workload, faults, quiet period, checker.
+* Scenarios: named sets of faults, listed in [SDD §5.10](SDD.md#510-chaos-runner).
+* `make chaos MODE=... SCENARIO=...` runs funding, workload, faults, quiet period, checker.
 
 Done when: a clean run passes every invariant and a hand-made corruption in the database fails the right one.
 
@@ -95,10 +97,10 @@ Same API, broken on purpose, selected by `LEDGER_MODE`:
 |---|---|---|
 | `no-idempotency` | Skips the `idempotency` table, so a retry with the same key posts again | I4, I6, I7 |
 | `dual-write` | Commits the transfer, then publishes to Kafka directly, no outbox | I8, I9 |
-| `unordered-locks` | Locks accounts in request order | Deadlocks and errors, not lost money. Shows why ordering matters |
-| `read-modify-write` | Reads the balance, computes in Java, writes it back without a lock | I2, I3 |
+| `unordered-locks` | Locks accounts in request order | I11. Deadlocks, not lost money. Shows why ordering matters |
+| `read-modify-write` | Reads the balance, computes in Java, writes it back without a lock | I2, and I3 when a lost update lets an account overspend |
 
-Done when: each naive mode fails the expected invariants in at least one chaos scenario, and the correct mode passes all of them.
+Done when: each naive mode fails at least its expected invariants in its scenario ([SDD §5.12](SDD.md#512-naive-modes)), and the correct mode passes all of them in every scenario.
 
 ### Phase 5: Experiments and report
 
