@@ -175,10 +175,12 @@ services:
   chaos:
     profiles: [tools]
     build:
-      context: chaos
+      context: services
       args:
-        GO_VERSION: ${GO_VERSION:-1.27}
+        JAVA_VERSION: ${JAVA_VERSION:-25}
+        MODULE: chaos
     image: ledger-chaos/chaos
+    user: "0"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./results:/results

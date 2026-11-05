@@ -8,7 +8,7 @@
 
 ## 1. TL;DR
 
-A double-entry ledger that moves money between accounts, with idempotency keys, a transactional outbox and an idempotent consumer. A Go chaos runner sends transfers while it kills processes, cuts the network and slows the database. After each run a checker proves that no cent was lost, created or applied twice.
+A double-entry ledger that moves money between accounts, with idempotency keys, a transactional outbox and an idempotent consumer. A chaos runner sends transfers while it kills processes, cuts the network and slows the database. After each run a checker proves that no cent was lost, created or applied twice.
 
 The same chaos also runs against naive versions of the ledger (dual write, no idempotency key, unordered locks). The checker must catch each one. That proves the checker works, and the numbers from the naive versions make the headline.
 
@@ -41,8 +41,8 @@ The project is about these rules. Every phase adds a way to break them and a way
 | `ledger` | Spring Boot MVC, Java, virtual threads, `JdbcClient`, Flyway | Accepts transfers, writes postings and the outbox row in one transaction |
 | `relay` | Spring Boot, Spring Kafka | Polls the outbox with `FOR UPDATE SKIP LOCKED`, publishes to Kafka, marks rows published |
 | `projector` | Spring Boot, Spring Kafka | Consumes events, keeps its own balance table, dedups by event id in the same transaction |
-| `chaos` | Go | Workload, fault injection, history recording |
-| `checker` | Go | Reads the history, Postgres and Kafka, reports each invariant |
+| `chaos` | Java 25, no Spring | Workload, fault injection, history recording |
+| `checker` | Java 25, no Spring | Reads the history, Postgres and Kafka, reports each invariant |
 
 `relay` and `projector` are separate deployables so the chaos runner can kill them on their own.
 
@@ -136,8 +136,8 @@ Commits, in this order. The services move first while the Go checker still judge
 
 1. Ledger, relay and projector on Jdbi, behavior unchanged. Every test asserts what it asserted before, and the Go checker passes the correct mode on `all` and fails each naive mode on its set.
 2. `checker` in Java. Each corruption test ported one to one, stats equal to the Go checker on the same histories.
-3. `chaos` in Java.
-4. Go removed from the Makefile, CI, `.env` and Sonar.
+3. `chaos` in Java, and the last Go out of the Makefile, CI, `.env` and Sonar, since deleting `chaos/` breaks every line that still names it.
+4. A `jlink` runtime for the two tools, shared by both images.
 5. A new experiment batch, `results/sample`, and the README and SDD tables from it.
 
 Done when: no Go in the repo, `./mvnw verify` runs every test, and the new batch gives every mode its expected verdict.
@@ -229,7 +229,7 @@ Done when: README and posts reviewed by Jader.
 | Testcontainers | Postgres, Kafka and Toxiproxy in JVM tests |
 | Flyway | Ledger and projector schemas |
 | Chaos Mesh | Optional Kubernetes chaos |
-| SonarQube Cloud | Quality gate, JaCoCo and Go coverage |
+| SonarQube Cloud | Quality gate, JaCoCo coverage |
 | GitHub Actions | Build, tests, nightly short chaos run per mode |
 
 Versions are in [SDD §7](SDD.md#7-libraries-and-versions).

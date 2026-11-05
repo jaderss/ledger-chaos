@@ -3,7 +3,7 @@ export
 
 COMPOSE := docker compose
 
-.PHONY: help up ledger services chaos chaos-all sample report report-dev test-go down clean test test-java
+.PHONY: help up ledger services chaos chaos-all sample report report-dev down clean test test-java
 
 help:
 	@echo "make up      start Postgres, Kafka and Toxiproxy, create roles, databases and topics"
@@ -14,7 +14,7 @@ help:
 	@echo "make sample RUNS='a b'   copy those runs' report.json into results/sample for the report page"
 	@echo "make report  build and serve the report page from results/sample on http://localhost:$(REPORT_PORT)"
 	@echo "make report-dev   report page with live reload over every run in results"
-	@echo "make test    Maven verify for the services and the Go tests"
+	@echo "make test    Maven verify for the services, the runner and the checker"
 	@echo "make down    stop everything"
 	@echo "make clean   stop everything, drop volumes and results"
 
@@ -44,16 +44,10 @@ report:
 report-dev:
 	cd report && npm install --no-audit --no-fund && RESULTS_DIR=../results npm run dev
 
-test: test-java test-go
+test: test-java
 
 test-java:
 	cd services && ./mvnw -B verify
-
-GO_TEST := docker run --rm --network ledger-chaos_default -e TEST_POSTGRES_DSN=postgres://postgres:$(POSTGRES_PASSWORD)@postgres:5432/postgres \
-	-e TEST_KAFKA_BROKERS=kafka:29092 -v ledger-chaos-gomod:/go/pkg/mod
-
-test-go: up
-	for m in chaos; do $(GO_TEST) -v "$$PWD/$$m":/src -w /src golang:$(GO_VERSION) go test -race -coverprofile=coverage.out ./... || exit 1; done
 
 down:
 	$(COMPOSE) down --remove-orphans

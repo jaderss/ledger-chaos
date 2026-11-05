@@ -286,13 +286,13 @@ Error handling: the default Spring Kafka `DefaultErrorHandler` retries 9 times, 
 Workload:
 
 * `ACCOUNTS` accounts in one currency, every `OVERDRAFT_EVERY`th with overdraft. A small number on purpose, to force lock contention.
-* `WORKERS` goroutines send transfers with random pairs and amounts from 1 to `AMOUNT_MAX_MINOR`, each with a new UUID key.
+* `WORKERS` virtual threads send transfers with random pairs and amounts from 1 to `AMOUNT_MAX_MINOR`, each with a new UUID key.
 * Timeout, connection error or `5xx`: record `unknown`, retry with the same key up to `RETRIES` times.
 * `DUPLICATE_RATE` of transfers are sent twice in parallel with the same key.
 * `MISMATCH_RATE` of transfers reuse a key with another body. Only keys that already got a definite `201` or `200` are reused. A key whose outcome is still unknown may never have committed, and then the mismatch body would become the transfer in a correct ledger and fail I7 for the wrong reason.
-* `READERS` goroutines read balances for I10. Not built yet, they come with the Porcupine check (§12 Q4).
+* `READERS` virtual threads read balances for I10. Not built yet, they come with the linearizability check (§12 Q4).
 
-Every request has its own `CLIENT_TIMEOUT`, not the run's deadline, so the end of the run never cuts a request short. The HTTP client keeps two idle connections per worker. With Go's default of two per host, almost every request opened a new connection, and at about 2,400 requests per second the client ran out of local ports 42 s into a run: thousands of `unknown` answers the ledger never saw. The runner uses only the Go standard library: the ledger, the Docker Engine API and the Toxiproxy API are a few HTTP calls each.
+Every request has its own `CLIENT_TIMEOUT`, not the run's deadline, so the end of the run never cuts a request short. The HTTP client is `java.net.http` on HTTP/1.1, which keeps every idle connection for reuse. The first runner, in Go, kept two idle connections per host, and at about 2,400 requests per second it ran out of local ports 42 s into a run: thousands of `unknown` answers the ledger never saw. `LedgerClientTest` checks that 16 workers sending 800 transfers open at most 32 connections. Jackson is the runner's only library. The ledger and Toxiproxy go through `java.net.http`, and the Docker Engine API is HTTP/1.0 over the Unix socket, so the daemon closes each connection and the client reads to the end of the stream. The `chaos` container runs as root: the socket belongs to root and a `docker` group whose id differs per host, and access to the socket is root on the host anyway.
 
 History, one JSON line per event:
 
@@ -530,35 +530,44 @@ ledger-chaos/
 │   │       │   └── TransferPosted.java              record, own copy of the contract, refuses unbalanced postings
 │   │       ├── main/resources/db/migration/V1__projector.sql
 │   │       └── test/java/dev/jaderss/projector/ProjectorTest.java   duplicates, parallel partitions, DLT
-│   └── checker/                     plain Java, no Spring
+│   ├── checker/                     plain Java, no Spring
+│   │   └── src/
+│   │       ├── main/java/dev/jaderss/checker/
+│   │       │   ├── Checker.java             quiet wait, load, check, print, report.json
+│   │       │   ├── Config.java              settings from the environment
+│   │       │   ├── Invariants.java          pure checks over a Snapshot
+│   │       │   ├── Mode.java                Must fail set per mode, the verdict of the run
+│   │       │   ├── Snapshot.java            history, ledger, topic, projector balances, quiet
+│   │       │   ├── History.java             history.jsonl grouped by key
+│   │       │   ├── Stats.java               throughput, latency, answers per second, fault windows
+│   │       │   ├── Databases.java           Jdbi loaders for both databases
+│   │       │   └── TopicReader.java         Kafka admin offsets and lag, an assigned consumer with no group
+│   │       └── test/java/dev/jaderss/checker/
+│   │           ├── InvariantsTest.java      one corruption per invariant
+│   │           ├── StoresTest.java          loaders and topic reads, Testcontainers
+│   │           ├── CheckerTest.java         whole run against a fixture system
+│   │           └── ArchitectureTest.java    no service code, no Spring
+│   └── chaos/                       plain Java, Jackson only
 │       └── src/
-│           ├── main/java/dev/jaderss/checker/
-│           │   ├── Checker.java             quiet wait, load, check, print, report.json
+│           ├── main/java/dev/jaderss/chaos/
+│           │   ├── Chaos.java               heal, setup, funding, workload and nemesis until the deadline, run.json
 │           │   ├── Config.java              settings from the environment
-│           │   ├── Invariants.java          pure checks over a Snapshot
-│           │   ├── Mode.java                Must fail set per mode, the verdict of the run
-│           │   ├── Snapshot.java            history, ledger, topic, projector balances, quiet
-│           │   ├── History.java             history.jsonl grouped by key
-│           │   ├── Stats.java               throughput, latency, answers per second, fault windows
-│           │   ├── Databases.java           Jdbi loaders for both databases
-│           │   └── TopicReader.java         Kafka admin offsets and lag, an assigned consumer with no group
-│           └── test/java/dev/jaderss/checker/
-│               ├── InvariantsTest.java      one corruption per invariant
-│               ├── StoresTest.java          loaders and topic reads, Testcontainers
-│               ├── CheckerTest.java         whole run against a fixture system
-│               └── ArchitectureTest.java    no service code, no Spring
-├── chaos/                           Go, standard library only
-│   ├── Dockerfile
-│   ├── go.mod
-│   ├── main.go
-│   ├── config.go                    settings from the environment
-│   ├── ledger.go                    transfer client, classifies answers into ok, fail, unknown
-│   ├── workload.go
-│   ├── nemesis.go                   fault catalog and scenarios
-│   ├── docker.go                    Docker Engine API over the Unix socket
-│   ├── toxiproxy.go
-│   ├── history.go
-│   └── *_test.go                    fakes for the ledger, Docker and Toxiproxy
+│           │   ├── GoDuration.java          durations like 60s and 1500ms, as the scripts pass them
+│           │   ├── LedgerClient.java        java.net.http on HTTP/1.1
+│           │   ├── Outcome.java             classifies answers into ok, fail, unknown
+│           │   ├── Workload.java            workers on virtual threads, retries with the same key
+│           │   ├── Scenario.java            the faults of each scenario
+│           │   ├── Faults.java              fault catalog, heal all
+│           │   ├── Nemesis.java             one fault per interval, healed after its duration
+│           │   ├── Docker.java              Docker Engine API, HTTP/1.0 over the Unix socket
+│           │   ├── Toxiproxy.java
+│           │   └── JsonLog.java             history.jsonl and faults.jsonl
+│           └── test/java/dev/jaderss/chaos/
+│               ├── LedgerClientTest.java    WireMock: reset, empty response, slow answer, connection reuse
+│               ├── WorkloadTest.java        retries, retry budget, funding, a short run
+│               ├── FaultsTest.java          Docker over a fake daemon on a Unix socket, Toxiproxy, nemesis
+│               ├── ChaosTest.java           whole run against fakes
+│               └── ArchitectureTest.java    no service or checker code, no Spring
 ├── report/                          React, Vite, Recharts, nginx. Reads every results/sample/*/report.json at build time
 ├── scripts/
 │   ├── chaos.sh                     one mode and scenario per call
@@ -578,7 +587,7 @@ ledger-chaos/
 
 ## 7. Libraries and versions
 
-Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on 2026-11-04. JVM libraries marked **BOM** come from `spring-boot-dependencies` 4.1.2 and are not overridden in the poms.
+Checked on Maven Central, Docker Hub and GitHub releases on 2026-11-04. JVM libraries marked **BOM** come from `spring-boot-dependencies` 4.1.2 and are not overridden in the poms.
 
 ### 7.1 Runtime
 
@@ -595,7 +604,6 @@ Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on
 | HikariCP | 7.0.2 | BOM |
 | Jdbi | 3.55.0 | `jdbi3-core` and `jdbi3-postgres` in the three services and the checker. Not in the BOM: `jdbi3-bom` is imported in the parent pom |
 | Micrometer | 1.17.2 | BOM, Prometheus registry through Actuator |
-| Go | 1.27 | `chaos` |
 | PostgreSQL image | 18.6 | One instance, two databases |
 | Kafka image | `apache/kafka:4.4.0` | KRaft, single broker |
 | Toxiproxy image | `ghcr.io/shopify/toxiproxy:2.13.0` | |
@@ -610,6 +618,7 @@ Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on
 | AssertJ | 3.27.7 | BOM |
 | Testcontainers | 2.0.5 | BOM, modules `testcontainers-postgresql`, `testcontainers-kafka`, `testcontainers-toxiproxy` |
 | Awaitility | 4.3.0 | BOM |
+| WireMock | 3.13.2 | `wiremock-standalone`, `chaos` tests only: connection resets, empty responses, slow answers. Not in the BOM, pinned in the parent pom |
 | jqwik | 1.10.2 | Property tests, not in the BOM |
 | ArchUnit | 1.5.1 | `archunit-junit5`, domain package rule |
 | PIT | 1.30.1 | `pitest-maven` with `pitest-junit5-plugin` 1.2.3, domain package only |
@@ -622,7 +631,7 @@ Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on
 | Tool | Version | Notes |
 |---|---|---|
 | Chaos Mesh | 2.8.7 | Optional Kubernetes run |
-| GitHub Actions | `checkout@v7`, `setup-java@v6`, `setup-go`, `setup-node@v7` | |
+| GitHub Actions | `checkout@v7`, `setup-java@v6`, `setup-node@v7` | |
 
 ---
 
@@ -723,7 +732,7 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 ### 10.4 `BigDecimal` for money
 
 **What:** the usual Java choice.
-**Why not:** amounts are whole minor units, `long` with `Math.addExact` is exact and maps to `bigint` in Postgres and in Go. Same choice as the prime-bench gateway contract.
+**Why not:** amounts are whole minor units, `long` with `Math.addExact` is exact and maps to `bigint` in Postgres. Same choice as the prime-bench gateway contract.
 
 ### 10.5 Hexagonal ports and adapters for the ledger
 
@@ -751,7 +760,7 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 | Q1 | Debezium mode in v1? | Common in production. | No, later mode. |
 | Q2 | Multi-currency with FX? | Realism against size. | No. |
 | Q3 | Postgres replica and failover? | Tests lost commits after promotion, a real finding. | No, single node. |
-| Q4 | Porcupine check in v1? | Strong result, more work. | Stretch goal. |
+| Q4 | Linearizability check (I10) in v1? Porcupine is Go only, so it needs a JVM checker or a small one of our own. | Strong result, more work. | Stretch goal. |
 | Q5 | Number of accounts for contention? | Too few and every transfer waits, too many and nothing collides. | 20, adjusted after the first runs. |
 | Q6 | `FUNDING_MINOR` per account? | Too high and nothing is ever rejected, too low and most transfers fail. It also decides whether `read-modify-write` breaks I3. | 100000 per account with amounts up to 5000, a first guess. The first 30 s contention run had 759 insufficient-funds rejections against 51,594 ok answers. `read-modify-write` did not break I3 in its first 60 s contention run, which deadlocked most of the time. Without the deadlocks it sent 133,417 transfers in 60 s and broke I3 on 5 accounts (§5.14). |
 

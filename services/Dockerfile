@@ -9,6 +9,7 @@ COPY ledger/pom.xml ledger/
 COPY relay/pom.xml relay/
 COPY projector/pom.xml projector/
 COPY checker/pom.xml checker/
+COPY chaos/pom.xml chaos/
 RUN ./mvnw -q -B -pl ${MODULE} dependency:go-offline
 COPY ${MODULE}/src ${MODULE}/src
 RUN ./mvnw -q -B -pl ${MODULE} package -DskipTests -Dspotless.check.skip=true -Djacoco.skip=true \
