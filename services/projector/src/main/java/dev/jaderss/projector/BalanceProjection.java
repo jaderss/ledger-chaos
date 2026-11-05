@@ -1,36 +1,38 @@
 package dev.jaderss.projector;
 
-import org.springframework.jdbc.core.simple.JdbcClient;
+import org.jdbi.v3.core.Jdbi;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 @Component
 class BalanceProjection {
 
-    private final JdbcClient jdbc;
+    private final Jdbi jdbi;
 
-    BalanceProjection(JdbcClient jdbc) {
-        this.jdbc = jdbc;
+    BalanceProjection(Jdbi jdbi) {
+        this.jdbi = jdbi;
     }
 
-    @Transactional
     public boolean apply(TransferPosted event) {
-        var firstTime = jdbc.sql("insert into processed_event (event_id) values (:id) on conflict do nothing")
-                        .param("id", event.eventId())
-                        .update()
-                == 1;
-        if (firstTime) {
-            event.postingsInAccountOrder()
-                    .forEach(line -> jdbc.sql("""
-                            insert into balance (account_id, currency, balance_minor) values (:account, :currency, :amount)
-                            on conflict (account_id) do update
-                               set balance_minor = balance.balance_minor + excluded.balance_minor
-                            """)
-                            .param("account", line.accountId())
-                            .param("currency", event.currency())
-                            .param("amount", line.amountMinor())
-                            .update());
-        }
-        return firstTime;
+        return jdbi.inTransaction(handle -> {
+            var firstTime =
+                    handle.createUpdate("insert into processed_event (event_id) values (:id) on conflict do nothing")
+                                    .bind("id", event.eventId())
+                                    .execute()
+                            == 1;
+            if (firstTime) {
+                event.postingsInAccountOrder()
+                        .forEach(line -> handle.createUpdate("""
+                                        insert into balance (account_id, currency, balance_minor)
+                                        values (:account, :currency, :amount)
+                                        on conflict (account_id) do update
+                                           set balance_minor = balance.balance_minor + excluded.balance_minor
+                                        """)
+                                .bind("account", line.accountId())
+                                .bind("currency", event.currency())
+                                .bind("amount", line.amountMinor())
+                                .execute());
+            }
+            return firstTime;
+        });
     }
 }

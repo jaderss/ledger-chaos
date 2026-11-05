@@ -13,11 +13,10 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
+import org.jdbi.v3.core.Handle;
+import org.jdbi.v3.core.statement.StatementContext;
 
-@Repository
-public class TransferStore {
+public record TransferStore(Handle handle) {
 
     private static final String COLUMNS = """
             select id, request_key, correlation_id, from_account, to_account, amount_minor, currency,
@@ -25,48 +24,42 @@ public class TransferStore {
               from transfer
             """;
 
-    private final JdbcClient jdbc;
-
-    public TransferStore(JdbcClient jdbc) {
-        this.jdbc = jdbc;
-    }
-
     public Transfer insert(Transfer transfer) {
-        return jdbc.sql("""
-                insert into transfer (id, request_key, correlation_id, from_account, to_account,
-                                      amount_minor, currency, status, reject_reason)
-                values (:id, :key, :correlationId, :from, :to, :amount, :currency, :status, :reason)
-                returning id, request_key, correlation_id, from_account, to_account, amount_minor, currency,
-                          status, reject_reason, created_at
-                """)
-                .param("id", transfer.id().value())
-                .param("key", transfer.key().value())
-                .param("correlationId", transfer.correlationId())
-                .param("from", transfer.from().value())
-                .param("to", transfer.to().value())
-                .param("amount", transfer.amount().amountMinor())
-                .param("currency", transfer.amount().currency().getCurrencyCode())
-                .param("status", transfer.status().name())
-                .param("reason", transfer.reason().map(Enum::name).orElse(null))
-                .query(TransferStore::map)
-                .single();
+        return handle.createQuery("""
+                        insert into transfer (id, request_key, correlation_id, from_account, to_account,
+                                              amount_minor, currency, status, reject_reason)
+                        values (:id, :key, :correlationId, :from, :to, :amount, :currency, :status, :reason)
+                        returning id, request_key, correlation_id, from_account, to_account, amount_minor, currency,
+                                  status, reject_reason, created_at
+                        """)
+                .bind("id", transfer.id().value())
+                .bind("key", transfer.key().value())
+                .bind("correlationId", transfer.correlationId())
+                .bind("from", transfer.from().value())
+                .bind("to", transfer.to().value())
+                .bind("amount", transfer.amount().amountMinor())
+                .bind("currency", transfer.amount().currency().getCurrencyCode())
+                .bind("status", transfer.status().name())
+                .bind("reason", transfer.reason().map(Enum::name).orElse(null))
+                .map(TransferStore::map)
+                .one();
     }
 
     public Optional<Transfer> find(TransferId id) {
-        return jdbc.sql(COLUMNS + "where id = :id")
-                .param("id", id.value())
-                .query(TransferStore::map)
-                .optional();
+        return handle.createQuery(COLUMNS + "where id = :id")
+                .bind("id", id.value())
+                .map(TransferStore::map)
+                .findOne();
     }
 
     public List<Transfer> findByKey(IdempotencyKey key) {
-        return jdbc.sql(COLUMNS + "where request_key = :key order by created_at")
-                .param("key", key.value())
-                .query(TransferStore::map)
+        return handle.createQuery(COLUMNS + "where request_key = :key order by created_at")
+                .bind("key", key.value())
+                .map(TransferStore::map)
                 .list();
     }
 
-    private static Transfer map(ResultSet rs, int row) throws SQLException {
+    private static Transfer map(ResultSet rs, StatementContext context) throws SQLException {
         var reason = rs.getString("reject_reason");
         return new Transfer(
                 new TransferId(rs.getObject("id", UUID.class)),

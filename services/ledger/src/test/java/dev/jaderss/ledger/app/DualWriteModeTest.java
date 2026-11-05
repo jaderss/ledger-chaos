@@ -1,17 +1,21 @@
 package dev.jaderss.ledger.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import dev.jaderss.ledger.Fixtures;
 import dev.jaderss.ledger.PostgresContainer;
 import dev.jaderss.ledger.app.TransferOutcome.Created;
+import dev.jaderss.ledger.persistence.Isolation;
+import dev.jaderss.ledger.persistence.LedgerDatabase;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -26,9 +30,6 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.kafka.KafkaContainer;
 
 @SpringBootTest(properties = "ledger.mode=dual-write")
@@ -49,10 +50,7 @@ class DualWriteModeTest {
     Fixtures fixtures;
 
     @Autowired
-    JdbcClient jdbc;
-
-    @Autowired
-    PlatformTransactionManager transactionManager;
+    LedgerDatabase database;
 
     @Autowired
     KafkaContainer kafka;
@@ -90,10 +88,10 @@ class DualWriteModeTest {
     }
 
     private long outboxRows(String transferId) {
-        return jdbc.sql("select count(*) from outbox where transfer_id = cast(:id as uuid)")
-                .param("id", transferId)
-                .query(Long.class)
-                .single();
+        return fixtures.sql(h -> h.createQuery("select count(*) from outbox where transfer_id = cast(:id as uuid)")
+                .bind("id", transferId)
+                .mapTo(Long.class)
+                .one());
     }
 
     @Test
@@ -117,13 +115,14 @@ class DualWriteModeTest {
     void rollbackPublishesNothing() {
         var from = fixtures.account(1_000);
         var to = fixtures.account(0);
-        var transaction = new TransactionTemplate(transactionManager);
+        var outcome = new AtomicReference<TransferOutcome>();
 
-        var outcome = transaction.execute(status -> {
-            status.setRollbackOnly();
-            return fixtures.transfer(from, to, 100);
-        });
-        var transferId = ((Created) outcome).transfer().id().value().toString();
+        assertThatThrownBy(() -> database.inTransaction(Isolation.READ_COMMITTED, _ -> {
+                    outcome.set(fixtures.transfer(from, to, 100));
+                    throw new IllegalStateException("roll back");
+                }))
+                .hasMessage("roll back");
+        var transferId = ((Created) outcome.get()).transfer().id().value().toString();
 
         await().during(Duration.ofSeconds(2))
                 .atMost(Duration.ofSeconds(3))

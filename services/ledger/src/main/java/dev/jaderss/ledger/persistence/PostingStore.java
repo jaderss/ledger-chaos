@@ -3,24 +3,16 @@ package dev.jaderss.ledger.persistence;
 import dev.jaderss.ledger.domain.Posting;
 import dev.jaderss.ledger.domain.TransferId;
 import java.util.List;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
+import org.jdbi.v3.core.Handle;
 
-@Repository
-public class PostingStore {
-
-    private final JdbcClient jdbc;
-
-    public PostingStore(JdbcClient jdbc) {
-        this.jdbc = jdbc;
-    }
+public record PostingStore(Handle handle) {
 
     public void insert(TransferId transferId, List<Posting> postings) {
-        postings.forEach(posting -> jdbc.sql(
+        postings.forEach(posting -> handle.createUpdate(
                         "insert into posting (transfer_id, account_id, amount_minor) values (:transferId, :account, :amount)")
-                .param("transferId", transferId.value())
-                .param("account", posting.accountId().value())
-                .param("amount", posting.amount().amountMinor())
-                .update());
+                .bind("transferId", transferId.value())
+                .bind("account", posting.accountId().value())
+                .bind("amount", posting.amount().amountMinor())
+                .execute());
     }
 }

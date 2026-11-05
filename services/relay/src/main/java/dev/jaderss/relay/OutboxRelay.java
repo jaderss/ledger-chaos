@@ -1,19 +1,17 @@
 package dev.jaderss.relay;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 @Component
 class OutboxRelay {
@@ -21,19 +19,13 @@ class OutboxRelay {
     static final String CORRELATION_HEADER = "correlationId";
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
 
-    private final OutboxStore outbox;
+    private final Jdbi jdbi;
     private final KafkaTemplate<String, String> kafka;
-    private final TransactionTemplate transaction;
     private final RelayProperties properties;
 
-    OutboxRelay(
-            OutboxStore outbox,
-            KafkaTemplate<String, String> kafka,
-            PlatformTransactionManager transactionManager,
-            RelayProperties properties) {
-        this.outbox = outbox;
+    OutboxRelay(Jdbi jdbi, KafkaTemplate<String, String> kafka, RelayProperties properties) {
+        this.jdbi = jdbi;
         this.kafka = kafka;
-        this.transaction = new TransactionTemplate(transactionManager);
         this.properties = properties;
     }
 
@@ -49,7 +41,8 @@ class OutboxRelay {
     }
 
     int publishBatch() {
-        return Objects.requireNonNull(transaction.execute(_ -> {
+        return jdbi.inTransaction(handle -> {
+            var outbox = new OutboxStore(handle);
             var rows = outbox.claim(properties.batch());
             if (rows.isEmpty()) {
                 return 0;
@@ -58,7 +51,7 @@ class OutboxRelay {
             await(CompletableFuture.allOf(sends));
             outbox.markPublished(rows.stream().map(OutboxStore.Row::id).toList());
             return rows.size();
-        }));
+        });
     }
 
     private CompletableFuture<?> send(OutboxStore.Row row) {

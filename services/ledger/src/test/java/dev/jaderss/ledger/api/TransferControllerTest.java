@@ -16,7 +16,6 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.client.RestTestClient;
 import org.springframework.test.web.servlet.client.RestTestClient.ResponseSpec;
 
@@ -29,9 +28,6 @@ class TransferControllerTest {
 
     @Autowired
     Fixtures fixtures;
-
-    @Autowired
-    JdbcClient jdbc;
 
     RestTestClient client;
     AccountId alice;
@@ -61,10 +57,10 @@ class TransferControllerTest {
     }
 
     private int transfersWithKey(String key) {
-        return jdbc.sql("select count(*) from transfer where request_key = :key")
-                .param("key", key)
-                .query(Integer.class)
-                .single();
+        return fixtures.sql(h -> h.createQuery("select count(*) from transfer where request_key = :key")
+                .bind("key", key)
+                .mapTo(Integer.class)
+                .one());
     }
 
     @Test
@@ -97,18 +93,18 @@ class TransferControllerTest {
                 .getResponseBody()
                 .id();
 
-        var row = jdbc.sql("""
+        var row = fixtures.sql(h -> h.createQuery("""
                 select id, payload ->> 'eventId' as event_id, payload ->> 'currency' as currency,
                        (select sum((p ->> 'amountMinor')::bigint) from jsonb_array_elements(payload -> 'postings') p) as sum
                   from outbox where transfer_id = :id
                 """)
-                .param("id", id)
-                .query((rs, n) -> Map.of(
+                .bind("id", id)
+                .map((rs, _) -> Map.of(
                         "id", rs.getString("id"),
                         "eventId", rs.getString("event_id"),
                         "currency", rs.getString("currency"),
                         "sum", rs.getLong("sum")))
-                .single();
+                .one());
         assertThat(row)
                 .containsEntry("eventId", row.get("id"))
                 .containsEntry("currency", "EUR")

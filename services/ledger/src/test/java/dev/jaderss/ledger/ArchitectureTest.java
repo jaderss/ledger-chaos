@@ -35,6 +35,21 @@ class ArchitectureTest {
             .resideInAnyPackage("..api..", "..app..", "..messaging..");
 
     @ArchTest
+    static final ArchRule jdbiOwnsTheTransactions = noClasses()
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                    "org.springframework.jdbc..", "org.springframework.dao..", "org.springframework.transaction..");
+
+    @ArchTest
+    static final ArchRule onlyPersistenceTalksToTheDatabase = noClasses()
+            .that()
+            .resideOutsideOfPackage("..persistence..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAPackage("org.jdbi..");
+
+    @ArchTest
     static final ArchRule messagingDoesNotKnowTheApi = noClasses()
             .that()
             .resideInAPackage("..messaging..")

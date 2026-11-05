@@ -6,9 +6,11 @@ import dev.jaderss.ledger.Fixtures;
 import dev.jaderss.ledger.PostgresContainer;
 import dev.jaderss.ledger.app.TransferOutcome.Created;
 import dev.jaderss.ledger.domain.Money;
+import dev.jaderss.ledger.domain.Transfer;
 import dev.jaderss.ledger.domain.TransferCommand;
 import dev.jaderss.ledger.domain.TransferStatus;
-import dev.jaderss.ledger.persistence.TransferStore;
+import dev.jaderss.ledger.persistence.LedgerDatabase;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +25,7 @@ class NoIdempotencyModeTest {
     TransferService service;
 
     @Autowired
-    TransferStore transfers;
+    LedgerDatabase database;
 
     @Autowired
     Fixtures fixtures;
@@ -40,7 +42,8 @@ class NoIdempotencyModeTest {
 
         assertThat(first).isInstanceOf(Created.class).isNotEqualTo(retry);
         assertThat(retry).isInstanceOf(Created.class);
-        assertThat(transfers.findByKey(command.key())).hasSize(2).allMatch(t -> t.status() == TransferStatus.POSTED);
+        List<Transfer> posted = database.withStores(stores -> stores.transfers().findByKey(command.key()));
+        assertThat(posted).hasSize(2).allMatch(t -> t.status() == TransferStatus.POSTED);
         assertThat(fixtures.balance(from)).isEqualTo(800);
     }
 

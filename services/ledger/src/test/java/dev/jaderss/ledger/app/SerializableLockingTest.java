@@ -1,11 +1,13 @@
 package dev.jaderss.ledger.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import dev.jaderss.ledger.Fixtures;
 import dev.jaderss.ledger.PostgresContainer;
 import dev.jaderss.ledger.app.TransferOutcome.Created;
 import dev.jaderss.ledger.domain.TransferStatus;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -17,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 
 @SpringBootTest(
         properties = {
@@ -34,9 +35,6 @@ class SerializableLockingTest {
     @Autowired
     Fixtures fixtures;
 
-    @Autowired
-    JdbcClient jdbc;
-
     private static List<TransferOutcome> runAll(List<Callable<TransferOutcome>> tasks) throws Exception {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             var results = new ArrayList<TransferOutcome>();
@@ -48,9 +46,10 @@ class SerializableLockingTest {
     }
 
     private long rollbacks() {
-        return jdbc.sql("select xact_rollback from pg_stat_database where datname = current_database()")
-                .query(Long.class)
-                .single();
+        return fixtures.sql(
+                h -> h.createQuery("select xact_rollback from pg_stat_database where datname = current_database()")
+                        .mapTo(Long.class)
+                        .one());
     }
 
     @Test
@@ -69,7 +68,7 @@ class SerializableLockingTest {
         assertThat(fixtures.balance(a) + fixtures.balance(b)).isEqualTo(10_000);
         assertThat(fixtures.balance(a)).isEqualTo(fixtures.sumOfPostings(a));
         assertThat(fixtures.balance(b)).isEqualTo(fixtures.sumOfPostings(b));
-        assertThat(rollbacks()).isGreaterThan(rollbacksBefore);
+        await().atMost(Duration.ofSeconds(15)).until(this::rollbacks, rollbacks -> rollbacks > rollbacksBefore);
     }
 
     @Test

@@ -76,11 +76,11 @@ Inside `ledger` the code is layered, with a pure domain at the center. Not hexag
 |---|---|---|
 | `domain` | Values, ids, `TransferDecision.decide`: two accounts and an amount in, `Post` or `Reject` out. No Spring, JDBC or Jackson | Nothing |
 | `app` | Runs the transaction around the decision: claim the key, load the accounts, decide, write, publish | `domain`, `persistence`, `messaging` |
-| `persistence` | One `JdbcClient` class per table, no interfaces in front. `LedgerStores` groups the five | `domain` |
+| `persistence` | `LedgerDatabase` owns the Jdbi instance and every transaction. One store per table, a record over the transaction's Jdbi `Handle`, no interfaces in front. `LedgerStores` groups the five for one transaction | `domain` |
 | `messaging` | `DirectPublisher`, the Kafka send of the `dual-write` mode. The correct mode never uses it | `domain` |
 | `api` | Controllers, Problem Details, the correlation id filter | `app`, `domain`, `persistence` for reads |
 
-`ArchitectureTest` enforces the arrows: `domain` imports no framework and none of the other packages, and `persistence` and `messaging` never import `app`, `api` or each other. `TransferSteps` holds the three steps that change between modes (§5.12): claim the key, load the accounts, publish the event. Each step is a small functional interface, so a mode is one line in `TransferServiceConfig`, not a class.
+`ArchitectureTest` enforces the arrows: `domain` imports no framework and none of the other packages, `persistence` and `messaging` never import `app`, `api` or each other, only `persistence` imports Jdbi, and no class uses Spring's `jdbc`, `dao` or `transaction` packages. `TransferSteps` holds the three steps that change between modes (§5.12): claim the key, load the accounts, publish the event. Each step is a small functional interface, so a mode is one line in `TransferServiceConfig`, not a class.
 
 ### 5.3 Data model: ledger database
 
@@ -220,7 +220,9 @@ The foreign key from `idempotency` to `transfer` is deferred, so step 2 can clai
 
 Timeouts: `STATEMENT_TIMEOUT` on the server, `DB_SOCKET_TIMEOUT_S` (pgjdbc `socketTimeout`) on the client. When Postgres is paused, the server enforces nothing, and only the client-side timeout ends the call with a `503`. The relay and the projector set the same `socketTimeout`, so a paused database never leaves them waiting on a dead socket.
 
-`LEDGER_LOCKING=serializable` replaces step 4 with `SERIALIZABLE` isolation and no row locks. The retry wraps the whole transaction: a `TransactionTemplate` inside a loop catches `ConcurrencyFailureException` (Spring's translation of SQLState `40001` and `40P01`) up to `SERIALIZABLE_RETRIES` times, with no backoff. A catch inside a `@Transactional` method would retry inside a transaction that is already rolled back. `TransactionPolicy` holds the isolation level and the retry budget, so both locking strategies run through the same `LedgerTransferService`. `ordered` has a budget of zero. Serializable only runs with the correct mode, and `LedgerProperties` refuses any other combination at startup.
+Every transaction runs through `LedgerDatabase.inTransaction(isolation, stores -> ...)`, a Jdbi transaction. `READ_COMMITTED` is the Postgres default and adds nothing. `SERIALIZABLE` runs `set transaction isolation level serializable` as the transaction's first statement. Asking the driver for the level instead costs a `SHOW TRANSACTION ISOLATION LEVEL` round trip each time Jdbi checks, sets or restores it: six per transfer, each one its own commit, and the correct mode on `all` fell from 1,661 to 742 ok/s. `IsolationTest` checks the level each transaction really runs at. Jdbi errors leave `LedgerDatabase` as a sealed `DatabaseException`, chosen by the SQLState class: `23` is `IntegrityViolation` and answers `500 ledger-integrity`, `40` (`40001` serialization failure, `40P01` deadlock) is `ConcurrencyConflict`, and anything else is `Unavailable`. Both of the last two answer `503`, outcome unknown.
+
+`LEDGER_LOCKING=serializable` replaces step 4 with `SERIALIZABLE` isolation and no row locks. The retry wraps the whole transaction: a loop around `inTransaction` catches `ConcurrencyConflict` up to `SERIALIZABLE_RETRIES` times, with no backoff. A catch inside the transaction would retry in a transaction that Postgres already rolled back. `TransactionPolicy` holds the isolation level and the retry budget, so both locking strategies run through the same `LedgerTransferService`. `ordered` has a budget of zero. Serializable only runs with the correct mode, and `LedgerProperties` refuses any other combination at startup.
 
 Step 7 updates the two balances in account id order, in every mode. Without row locks, those `update`s are the first locks a serializable transaction takes. In request order, two transfers in opposite directions deadlock, and every deadlock waits `deadlock_timeout` (1 s) before Postgres picks a victim. The first `SerializableLockingTest` run took 348 s and ran out of pooled connections. With the updates in id order, the same test takes 2 s. `AccountId` sorts byte by byte, like Postgres sorts `uuid`. `UUID.compareTo` compares signed longs and gives another order.
 
@@ -365,7 +367,7 @@ Each invariant is a pure function over a `Snapshot` of the history, both databas
 |---|---|---|---|
 | `correct` | Algorithm in §5.6 | Every scenario | (none) |
 | `no-idempotency` | Key claim always succeeds without touching the `idempotency` table. A retry with the same key posts again, with its own `transfer` row and the same `request_key` | `db-latency` | I4, I6, I7 |
-| `dual-write` | No outbox row. `DirectPublisher` sends to Kafka from a `TransactionSynchronization.afterCommit`, and a failed send is only logged | `kafka-down` | I8, I9 |
+| `dual-write` | No outbox row. `DirectPublisher` sends to Kafka from the Jdbi handle's `afterCommit`, and a failed send is only logged | `kafka-down` | I8, I9 |
 | `unordered-locks` | Locks `from`, then `to`, one `select ... for update` each | `contention` | I11 |
 | `read-modify-write` | Reads balances without `for update`, writes computed values | `contention` | I2 |
 
@@ -485,9 +487,12 @@ ledger-chaos/
 │   │       │   │   └── TransactionPolicy.java       isolation level and retry budget per locking strategy
 │   │       │   ├── messaging/
 │   │       │   │   └── DirectPublisher.java         dual-write only: send after commit, no outbox
-│   │       │   └── persistence/                     JdbcClient stores
+│   │       │   └── persistence/                     Jdbi
+│   │       │       ├── LedgerDatabase.java          the Jdbi instance, inTransaction and withStores
+│   │       │       ├── DatabaseException.java       sealed: ConcurrencyConflict, IntegrityViolation, Unavailable
+│   │       │       ├── Isolation.java               READ_COMMITTED, or SERIALIZABLE as the first statement
 │   │       │       ├── AccountStore.java, IdempotencyStore.java, TransferStore.java, PostingStore.java, OutboxStore.java
-│   │       │       └── LedgerStores.java            record of the five stores
+│   │       │       └── LedgerStores.java            the five stores over one Handle
 │   │       ├── main/resources/
 │   │       │   ├── application.yaml
 │   │       │   └── db/migration/V1__ledger.sql, V2__posting_triggers.sql, V3__relay_grants.sql
@@ -498,6 +503,7 @@ ledger-chaos/
 │   │           ├── app/*ModeTest.java               one per naive mode, its defect without the chaos runner
 │   │           ├── app/SerializableLockingTest.java contention, overspend and duplicate keys without row locks
 │   │           ├── persistence/PostingTriggersTest.java   sum-zero and append-only triggers
+│   │           ├── persistence/IsolationTest.java   the level each transaction really runs at
 │   │           ├── api/TransferControllerTest.java  port 0, every row of §5.5 except 503
 │   │           ├── api/AccountControllerTest.java
 │   │           └── ArchitectureTest.java            ArchUnit, domain has no framework imports
@@ -507,6 +513,7 @@ ledger-chaos/
 │   │       │   ├── Application.java
 │   │       │   ├── OutboxRelay.java                 scheduled loop, one transaction per batch
 │   │       │   ├── OutboxStore.java                 claim with SKIP LOCKED, mark published
+│   │       │   ├── JdbiConfig.java                  the Jdbi bean, after Flyway
 │   │       │   ├── RelayProperties.java             checks the timeout inequality of §5.8 at startup
 │   │       │   └── ProducerSettings.java            acks=all, idempotence, producer timeouts
 │   │       └── test/java/dev/jaderss/relay/
@@ -518,7 +525,8 @@ ledger-chaos/
 │           │   ├── Application.java
 │           │   ├── TransferPostedListener.java      @KafkaListener, manual ack
 │           │   ├── KafkaErrorConfig.java            unlimited backoff, DLT only for records that do not parse
-│           │   ├── BalanceProjection.java           processed_event and upserts in account id order
+│           │   ├── BalanceProjection.java           processed_event and upserts in account id order, one Jdbi transaction
+│           │   ├── JdbiConfig.java                  the Jdbi bean, after Flyway
 │           │   └── TransferPosted.java              record, own copy of the contract, refuses unbalanced postings
 │           ├── main/resources/db/migration/V1__projector.sql
 │           └── test/java/dev/jaderss/projector/ProjectorTest.java   duplicates, parallel partitions, DLT
@@ -580,6 +588,7 @@ Checked on Maven Central, the Go module proxy, Docker Hub and GitHub releases on
 | Flyway | 12.4.0 | BOM, plus `flyway-database-postgresql` |
 | PostgreSQL JDBC | 42.7.14 | BOM |
 | HikariCP | 7.0.2 | BOM |
+| Jdbi | 3.55.0 | `jdbi3-core` and `jdbi3-postgres` in the three services. Not in the BOM: `jdbi3-bom` is imported in the parent pom |
 | Micrometer | 1.17.2 | BOM, Prometheus registry through Actuator |
 | Go | 1.27 | `chaos` and `checker` |
 | pgx | v5.12.0 | `checker` |
@@ -700,10 +709,10 @@ Postgres has one role per service. The `db-init` service runs Flyway as `postgre
 **What:** Debezium reads the Postgres WAL and publishes outbox rows.
 **Why not now:** adds Kafka Connect and logical replication setup to a project whose point is the invariants. Kept as a later mode, since the checker does not change.
 
-### 10.2 jOOQ or Spring Data JDBC instead of `JdbcClient`
+### 10.2 `JdbcClient`, jOOQ or Spring Data JDBC instead of Jdbi
 
-**What:** typed SQL or repositories.
-**Why not:** a few statements, all visible in one place. Locking and `on conflict` are clearer as plain SQL.
+**What:** Spring's `JdbcClient` with `TransactionTemplate`, which the services used up to Phase 5, or typed SQL, or repositories.
+**Why not:** Jdbi keeps the SQL as plain text blocks, so locking and `on conflict` stay visible, and the transaction is explicit in the code: `inTransaction` with its isolation level, `afterCommit` on the handle. With Spring the transaction is bound to the thread, and the error types come from Spring's translation instead of the SQLState. jOOQ adds code generation and 5 MB for a few statements, Spring Data hides them behind repositories. `jdbi3-spring` would join Spring's transactions, and `jdbi3-sqlobject` would move the SQL into annotations: both rejected, one transaction model and visible SQL. `spring-jdbc` stays on the classpath, because Boot's `DataSource` and Flyway setup need it, and `ArchitectureTest` keeps the code off it.
 
 ### 10.3 Jepsen and Elle instead of a Go checker
 

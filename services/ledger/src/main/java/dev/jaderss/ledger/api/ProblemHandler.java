@@ -2,13 +2,12 @@ package dev.jaderss.ledger.api;
 
 import dev.jaderss.ledger.domain.AccountNotFoundException;
 import dev.jaderss.ledger.domain.CurrencyMismatchException;
+import dev.jaderss.ledger.persistence.DatabaseException;
+import dev.jaderss.ledger.persistence.DatabaseException.IntegrityViolation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
-import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
@@ -45,13 +44,13 @@ class ProblemHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler
-    ProblemDetail integrity(DataIntegrityViolationException e) {
+    ProblemDetail integrity(IntegrityViolation e) {
         log.error("ledger integrity check failed", e);
         return Problems.of(HttpStatus.INTERNAL_SERVER_ERROR, "ledger-integrity", "the ledger refused the write");
     }
 
-    @ExceptionHandler({DataAccessException.class, TransactionException.class})
-    ProblemDetail unavailable(RuntimeException e) {
+    @ExceptionHandler
+    ProblemDetail unavailable(DatabaseException e) {
         log.warn("database unavailable: {}", e.getMessage());
         return Problems.of(HttpStatus.SERVICE_UNAVAILABLE, "unavailable", "outcome unknown, retry with the same key");
     }

@@ -18,6 +18,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -25,8 +26,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.kafka.KafkaContainer;
 
 @SpringBootTest(
@@ -46,10 +45,7 @@ class OutboxRelayTest {
     OutboxRelay relay;
 
     @Autowired
-    JdbcClient jdbc;
-
-    @Autowired
-    TransactionTemplate transaction;
+    Jdbi jdbi;
 
     @Autowired
     KafkaContainer kafka;
@@ -59,8 +55,7 @@ class OutboxRelayTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.sql("update outbox set published_at = now() where published_at is null")
-                .update();
+        jdbi.useHandle(h -> h.execute("update outbox set published_at = now() where published_at is null"));
         consumer = new KafkaConsumer<>(Map.of(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
                 kafka.getBootstrapServers(),
@@ -83,13 +78,14 @@ class OutboxRelayTest {
     private UUID insertRow() {
         var eventId = UUID.randomUUID();
         var transferId = UUID.randomUUID();
-        jdbc.sql("insert into outbox (id, transfer_id, payload) values (:id, :transferId, cast(:payload as jsonb))")
-                .param("id", eventId)
-                .param("transferId", transferId)
-                .param("payload", """
+        jdbi.useHandle(h -> h.createUpdate(
+                        "insert into outbox (id, transfer_id, payload) values (:id, :transferId, cast(:payload as jsonb))")
+                .bind("id", eventId)
+                .bind("transferId", transferId)
+                .bind("payload", """
                         {"eventId": "%s", "transferId": "%s", "correlationId": "req-%s"}
                         """.formatted(eventId, transferId, transferId))
-                .update();
+                .execute());
         return transferId;
     }
 
@@ -103,9 +99,9 @@ class OutboxRelayTest {
     }
 
     private long unpublished() {
-        return jdbc.sql("select count(*) from outbox where published_at is null")
-                .query(Long.class)
-                .single();
+        return jdbi.withHandle(h -> h.createQuery("select count(*) from outbox where published_at is null")
+                .mapTo(Long.class)
+                .one());
     }
 
     @Test
@@ -133,10 +129,11 @@ class OutboxRelayTest {
     void crashBetweenSendAndMark() {
         var transferId = insertRow();
 
-        transaction.executeWithoutResult(status -> {
-            relay.publishBatch();
-            status.setRollbackOnly();
-        });
+        assertThatThrownBy(() -> jdbi.useTransaction(_ -> {
+                    relay.publishBatch();
+                    throw new IllegalStateException("crash before the mark commits");
+                }))
+                .hasMessage("crash before the mark commits");
         assertThat(unpublished()).isOne();
         relay.publishBatch();
 

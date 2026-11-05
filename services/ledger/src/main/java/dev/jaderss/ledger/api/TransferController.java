@@ -8,7 +8,7 @@ import dev.jaderss.ledger.domain.IdempotencyKey;
 import dev.jaderss.ledger.domain.Transfer;
 import dev.jaderss.ledger.domain.TransferId;
 import dev.jaderss.ledger.domain.TransferStatus;
-import dev.jaderss.ledger.persistence.TransferStore;
+import dev.jaderss.ledger.persistence.LedgerDatabase;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
@@ -33,11 +33,11 @@ class TransferController {
     static final String REPLAYED = "Idempotent-Replayed";
 
     private final TransferService service;
-    private final TransferStore transfers;
+    private final LedgerDatabase database;
 
-    TransferController(TransferService service, TransferStore transfers) {
+    TransferController(TransferService service, LedgerDatabase database) {
         this.service = service;
-        this.transfers = transfers;
+        this.database = database;
     }
 
     @PostMapping
@@ -67,12 +67,15 @@ class TransferController {
 
     @GetMapping("/{id}")
     ResponseEntity<TransferResponse> get(@PathVariable UUID id) {
-        return ResponseEntity.of(transfers.find(new TransferId(id)).map(TransferResponse::from));
+        return ResponseEntity.of(
+                database.withStores(stores -> stores.transfers().find(new TransferId(id)))
+                        .map(TransferResponse::from));
     }
 
     @GetMapping
     List<TransferResponse> byKey(@RequestParam String idempotencyKey) {
-        return transfers.findByKey(InvalidRequestException.parse(() -> new IdempotencyKey(idempotencyKey))).stream()
+        var key = InvalidRequestException.parse(() -> new IdempotencyKey(idempotencyKey));
+        return database.withStores(stores -> stores.transfers().findByKey(key)).stream()
                 .map(TransferResponse::from)
                 .toList();
     }

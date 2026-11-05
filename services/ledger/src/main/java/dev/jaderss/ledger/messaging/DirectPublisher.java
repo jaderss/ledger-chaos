@@ -6,8 +6,6 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.json.JsonMapper;
 
 public class DirectPublisher {
@@ -25,16 +23,7 @@ public class DirectPublisher {
         this.topic = topic;
     }
 
-    public void publishAfterCommit(TransferPosted event) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                send(event);
-            }
-        });
-    }
-
-    private void send(TransferPosted event) {
+    public void send(TransferPosted event) {
         var message = new ProducerRecord<>(topic, event.transferId().toString(), json.writeValueAsString(event));
         message.headers().add(CORRELATION_HEADER, event.correlationId().getBytes(StandardCharsets.UTF_8));
         kafka.send(message).whenComplete((_, failure) -> {

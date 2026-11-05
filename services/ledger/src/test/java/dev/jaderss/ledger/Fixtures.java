@@ -9,7 +9,9 @@ import dev.jaderss.ledger.domain.AccountId;
 import dev.jaderss.ledger.domain.IdempotencyKey;
 import dev.jaderss.ledger.domain.Money;
 import dev.jaderss.ledger.domain.TransferCommand;
-import dev.jaderss.ledger.persistence.AccountStore;
+import dev.jaderss.ledger.persistence.DatabaseException.ConcurrencyConflict;
+import dev.jaderss.ledger.persistence.Isolation;
+import dev.jaderss.ledger.persistence.LedgerDatabase;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -17,36 +19,30 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
-import org.springframework.dao.PessimisticLockingFailureException;
-import org.springframework.jdbc.core.simple.JdbcClient;
+import java.util.function.Function;
+import org.jdbi.v3.core.Handle;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 @Component
 public class Fixtures {
 
-    private final AccountStore accounts;
+    private final LedgerDatabase database;
     private final TransferService transfers;
-    private final JdbcClient jdbc;
-    private final TransactionTemplate transaction;
     private final AccountId mint = new AccountId(UUID.randomUUID());
 
-    Fixtures(
-            AccountStore accounts,
-            TransferService transfers,
-            JdbcClient jdbc,
-            PlatformTransactionManager transactionManager) {
-        this.accounts = accounts;
+    Fixtures(LedgerDatabase database, TransferService transfers) {
+        this.database = database;
         this.transfers = transfers;
-        this.jdbc = jdbc;
-        this.transaction = new TransactionTemplate(transactionManager);
-        accounts.create(new Account(mint, Money.of(0, "EUR"), true));
+        database.withStores(stores -> stores.accounts().create(new Account(mint, Money.of(0, "EUR"), true)));
+    }
+
+    public <T> T sql(Function<Handle, T> query) {
+        return database.withStores(stores -> query.apply(stores.handle()));
     }
 
     public AccountId account(long funding) {
         var id = new AccountId(UUID.randomUUID());
-        accounts.create(new Account(id, Money.of(0, "EUR"), false));
+        database.withStores(stores -> stores.accounts().create(new Account(id, Money.of(0, "EUR"), false)));
         if (funding > 0) {
             transfers.transfer(command(mint, id, funding));
         }
@@ -63,52 +59,55 @@ public class Fixtures {
     }
 
     public long balance(AccountId id) {
-        return accounts.find(id).orElseThrow().balance().amountMinor();
+        return database.withStores(stores -> stores.accounts().find(id))
+                .orElseThrow()
+                .balance()
+                .amountMinor();
     }
 
     public long sumOfPostings(AccountId id) {
-        return jdbc.sql("select coalesce(sum(amount_minor), 0) from posting where account_id = :id")
-                .param("id", id.value())
-                .query(Long.class)
-                .single();
+        return sql(h -> h.createQuery("select coalesce(sum(amount_minor), 0) from posting where account_id = :id")
+                .bind("id", id.value())
+                .mapTo(Long.class)
+                .one());
     }
 
     public List<AccountId> inIdOrder(AccountId first, AccountId second) {
-        return jdbc
-                .sql("select id from account where id in (:first, :second) order by id")
-                .param("first", first.value())
-                .param("second", second.value())
-                .query(UUID.class)
-                .list()
+        return sql(h -> h.createQuery("select id from account where id in (:first, :second) order by id")
+                        .bind("first", first.value())
+                        .bind("second", second.value())
+                        .mapTo(UUID.class)
+                        .list())
                 .stream()
                 .map(AccountId::new)
                 .toList();
     }
 
     public void lock(AccountId id) {
-        jdbc.sql("select id from account where id = :id for update")
-                .param("id", id.value())
-                .query(UUID.class)
-                .single();
+        sql(h -> h.createQuery("select id from account where id = :id for update")
+                .bind("id", id.value())
+                .mapTo(UUID.class)
+                .one());
     }
 
     public long deadlocks() {
-        return jdbc.sql("select deadlocks from pg_stat_database where datname = current_database()")
-                .query(Long.class)
-                .single();
+        return sql(h -> h.createQuery("select deadlocks from pg_stat_database where datname = current_database()")
+                .mapTo(Long.class)
+                .one());
     }
 
     public Future<TransferOutcome> race(Runnable holding, Runnable thenTaking, Callable<TransferOutcome> racer) {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             var racing = new AtomicReference<Future<TransferOutcome>>();
             try {
-                transaction.executeWithoutResult(_ -> {
+                database.inTransaction(Isolation.READ_COMMITTED, _ -> {
                     holding.run();
                     racing.set(executor.submit(racer));
                     await().atMost(Duration.ofSeconds(10)).until(this::someoneWaitsOnALock);
                     thenTaking.run();
+                    return null;
                 });
-            } catch (PessimisticLockingFailureException _) {
+            } catch (ConcurrencyConflict _) {
                 return racing.get();
             }
             return racing.get();
@@ -116,9 +115,9 @@ public class Fixtures {
     }
 
     private boolean someoneWaitsOnALock() {
-        return jdbc.sql("""
-                select exists (select 1 from pg_stat_activity
-                                where datname = current_database() and wait_event_type = 'Lock')
-                """).query(Boolean.class).single();
+        return sql(h -> h.createQuery("""
+                        select exists (select 1 from pg_stat_activity
+                                        where datname = current_database() and wait_event_type = 'Lock')
+                        """).mapTo(Boolean.class).one());
     }
 }

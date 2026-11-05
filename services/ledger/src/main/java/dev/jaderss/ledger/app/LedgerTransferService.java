@@ -16,61 +16,52 @@ import dev.jaderss.ledger.domain.TransferDecision.Reject;
 import dev.jaderss.ledger.domain.TransferId;
 import dev.jaderss.ledger.domain.TransferPosted;
 import dev.jaderss.ledger.domain.TransferStatus;
+import dev.jaderss.ledger.persistence.DatabaseException.ConcurrencyConflict;
+import dev.jaderss.ledger.persistence.LedgerDatabase;
 import dev.jaderss.ledger.persistence.LedgerStores;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Stream;
-import org.springframework.dao.ConcurrencyFailureException;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 final class LedgerTransferService implements TransferService {
 
-    private final TransactionTemplate transaction;
-    private final LedgerStores stores;
+    private final LedgerDatabase database;
     private final TransferSteps steps;
-    private final int retries;
+    private final TransactionPolicy policy;
 
-    LedgerTransferService(
-            PlatformTransactionManager transactionManager,
-            LedgerStores stores,
-            TransferSteps steps,
-            TransactionPolicy policy) {
-        this.transaction = new TransactionTemplate(transactionManager);
-        this.transaction.setIsolationLevel(policy.isolationLevel());
-        this.stores = stores;
+    LedgerTransferService(LedgerDatabase database, TransferSteps steps, TransactionPolicy policy) {
+        this.database = database;
         this.steps = steps;
-        this.retries = policy.retries();
+        this.policy = policy;
     }
 
     @Override
     public TransferOutcome transfer(TransferCommand command) {
         for (var attempt = 0; ; attempt++) {
             try {
-                return Objects.requireNonNull(transaction.execute(_ -> transferInTransaction(command)));
-            } catch (ConcurrencyFailureException e) {
-                if (attempt >= retries) {
+                return database.inTransaction(policy.isolation(), stores -> transferIn(stores, command));
+            } catch (ConcurrencyConflict e) {
+                if (attempt >= policy.retries()) {
                     throw e;
                 }
             }
         }
     }
 
-    private TransferOutcome transferInTransaction(TransferCommand command) {
+    private TransferOutcome transferIn(LedgerStores stores, TransferCommand command) {
         var hash = command.hash();
         var id = TransferId.random();
-        if (!steps.claim().claim(command.key(), hash, id)) {
-            return replay(command, hash);
+        if (!steps.claim().claim(stores.idempotency(), command.key(), hash, id)) {
+            return replay(stores, command, hash);
         }
-        var locked = steps.load().load(command.from(), command.to());
+        var locked = steps.load().load(stores.accounts(), command.from(), command.to());
         var from = pick(locked, command.from());
         var to = pick(locked, command.to());
-        return new Created(record(id, command, TransferDecision.decide(from, to, command.amount())));
+        return new Created(record(stores, id, command, TransferDecision.decide(from, to, command.amount())));
     }
 
-    private TransferOutcome replay(TransferCommand command, RequestHash hash) {
+    private static TransferOutcome replay(LedgerStores stores, TransferCommand command, RequestHash hash) {
         var entry = stores.idempotency()
                 .find(command.key())
                 .orElseThrow(() -> new IllegalStateException("idempotency key " + command.key() + " vanished"));
@@ -82,7 +73,7 @@ final class LedgerTransferService implements TransferService {
                 .orElseThrow(() -> new IllegalStateException("transfer " + entry.transferId() + " vanished")));
     }
 
-    private Transfer record(TransferId id, TransferCommand command, TransferDecision decision) {
+    private Transfer record(LedgerStores stores, TransferId id, TransferCommand command, TransferDecision decision) {
         return switch (decision) {
             case Reject(var reason) ->
                 stores.transfers().insert(newTransfer(id, command, TransferStatus.REJECTED, reason));
@@ -90,7 +81,7 @@ final class LedgerTransferService implements TransferService {
                 var transfer = stores.transfers().insert(newTransfer(id, command, TransferStatus.POSTED, null));
                 stores.postings().insert(id, lines);
                 Stream.of(from, to).sorted(Comparator.comparing(Account::id)).forEach(stores.accounts()::updateBalance);
-                steps.publish().posted(TransferPosted.of(UUID.randomUUID(), transfer, lines));
+                steps.publish().posted(stores, TransferPosted.of(UUID.randomUUID(), transfer, lines));
                 yield transfer;
             }
         };

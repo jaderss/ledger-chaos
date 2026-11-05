@@ -10,15 +10,13 @@ import dev.jaderss.ledger.domain.AccountId;
 import dev.jaderss.ledger.domain.Money;
 import dev.jaderss.ledger.domain.Posting;
 import dev.jaderss.ledger.domain.TransferId;
+import dev.jaderss.ledger.persistence.DatabaseException.IntegrityViolation;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.transaction.support.TransactionTemplate;
 
 @SpringBootTest
 @Import({PostgresContainer.class, Fixtures.class})
@@ -28,13 +26,7 @@ class PostingTriggersTest {
     Fixtures fixtures;
 
     @Autowired
-    PostingStore postings;
-
-    @Autowired
-    JdbcClient jdbc;
-
-    @Autowired
-    TransactionTemplate transaction;
+    LedgerDatabase database;
 
     private TransferId postedTransfer(AccountId from, AccountId to) {
         return ((Created) fixtures.transfer(from, to, 10)).transfer().id();
@@ -48,9 +40,11 @@ class PostingTriggersTest {
         var transferId = postedTransfer(a, b);
         var before = fixtures.sumOfPostings(b);
 
-        assertThatThrownBy(() -> transaction.executeWithoutResult(_ ->
-                        postings.insert(transferId, List.of(new Posting(b, Money.of(5, "EUR"))))))
-                .isInstanceOf(DataIntegrityViolationException.class)
+        assertThatThrownBy(() -> database.inTransaction(Isolation.READ_COMMITTED, stores -> {
+                    stores.postings().insert(transferId, List.of(new Posting(b, Money.of(5, "EUR"))));
+                    return null;
+                }))
+                .isInstanceOf(IntegrityViolation.class)
                 .hasMessageContaining("do not sum to zero");
         assertThat(fixtures.sumOfPostings(b)).isEqualTo(before);
     }
@@ -61,10 +55,11 @@ class PostingTriggersTest {
         var a = fixtures.account(100);
         postedTransfer(a, fixtures.account(0));
 
-        assertThatThrownBy(() -> jdbc.sql("update posting set amount_minor = 1 where account_id = :id")
-                        .param("id", a.value())
-                        .update())
-                .isInstanceOf(DataIntegrityViolationException.class)
+        assertThatThrownBy(() ->
+                        fixtures.sql(h -> h.createUpdate("update posting set amount_minor = 1 where account_id = :id")
+                                .bind("id", a.value())
+                                .execute()))
+                .isInstanceOf(IntegrityViolation.class)
                 .hasMessageContaining("append only");
     }
 
@@ -74,9 +69,9 @@ class PostingTriggersTest {
         var a = fixtures.account(100);
         postedTransfer(a, fixtures.account(0));
 
-        assertThatThrownBy(() -> jdbc.sql("delete from posting where account_id = :id")
-                        .param("id", a.value())
-                        .update())
-                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> fixtures.sql(h -> h.createUpdate("delete from posting where account_id = :id")
+                        .bind("id", a.value())
+                        .execute()))
+                .isInstanceOf(IntegrityViolation.class);
     }
 }

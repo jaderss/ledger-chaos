@@ -15,12 +15,12 @@ import java.util.stream.IntStream;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.testcontainers.kafka.KafkaContainer;
 import tools.jackson.databind.json.JsonMapper;
@@ -36,7 +36,7 @@ class ProjectorTest {
     KafkaContainer container;
 
     @Autowired
-    JdbcClient jdbc;
+    Jdbi jdbi;
 
     @Autowired
     JsonMapper json;
@@ -64,17 +64,18 @@ class ProjectorTest {
     }
 
     private long balance(UUID account) {
-        return jdbc.sql("select coalesce(sum(balance_minor), 0) from balance where account_id = :id")
-                .param("id", account)
-                .query(Long.class)
-                .single();
+        return jdbi.withHandle(
+                h -> h.createQuery("select coalesce(sum(balance_minor), 0) from balance where account_id = :id")
+                        .bind("id", account)
+                        .mapTo(Long.class)
+                        .one());
     }
 
     private long processed(UUID eventId) {
-        return jdbc.sql("select count(*) from processed_event where event_id = :id")
-                .param("id", eventId)
-                .query(Long.class)
-                .single();
+        return jdbi.withHandle(h -> h.createQuery("select count(*) from processed_event where event_id = :id")
+                .bind("id", eventId)
+                .mapTo(Long.class)
+                .one());
     }
 
     private void awaitBalance(UUID account, long expected) {

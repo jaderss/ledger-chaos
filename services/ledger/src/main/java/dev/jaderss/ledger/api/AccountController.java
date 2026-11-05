@@ -4,7 +4,7 @@ import dev.jaderss.ledger.domain.Account;
 import dev.jaderss.ledger.domain.AccountId;
 import dev.jaderss.ledger.domain.AccountNotFoundException;
 import dev.jaderss.ledger.domain.Money;
-import dev.jaderss.ledger.persistence.AccountStore;
+import dev.jaderss.ledger.persistence.LedgerDatabase;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
@@ -21,17 +21,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/accounts")
 class AccountController {
 
-    private final AccountStore accounts;
+    private final LedgerDatabase database;
 
-    AccountController(AccountStore accounts) {
-        this.accounts = accounts;
+    AccountController(LedgerDatabase database) {
+        this.database = database;
     }
 
     @PostMapping
     ResponseEntity<Object> create(@Valid @RequestBody AccountRequest request) {
         var id = new AccountId(request.id());
-        if (accounts.create(new Account(
-                id, InvalidRequestException.parse(() -> Money.of(0, request.currency())), request.allowOverdraft()))) {
+        var account = new Account(
+                id, InvalidRequestException.parse(() -> Money.of(0, request.currency())), request.allowOverdraft());
+        if (database.withStores(stores -> stores.accounts().create(account))) {
             return ResponseEntity.created(URI.create("/accounts/" + id)).body(AccountResponse.from(find(id)));
         }
         var existing = find(id);
@@ -50,6 +51,7 @@ class AccountController {
     }
 
     private Account find(AccountId id) {
-        return accounts.find(id).orElseThrow(() -> new AccountNotFoundException(id));
+        return database.withStores(stores -> stores.accounts().find(id))
+                .orElseThrow(() -> new AccountNotFoundException(id));
     }
 }

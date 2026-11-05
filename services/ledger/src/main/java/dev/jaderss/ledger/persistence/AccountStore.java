@@ -9,44 +9,37 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
+import org.jdbi.v3.core.Handle;
+import org.jdbi.v3.core.statement.StatementContext;
 
-@Repository
-public class AccountStore {
+public record AccountStore(Handle handle) {
 
     private static final String COLUMNS = "select id, currency, allow_overdraft, balance_minor from account ";
 
-    private final JdbcClient jdbc;
-
-    public AccountStore(JdbcClient jdbc) {
-        this.jdbc = jdbc;
-    }
-
     public boolean create(Account account) {
-        return jdbc.sql("""
-                insert into account (id, currency, allow_overdraft) values (:id, :currency, :overdraft)
-                on conflict (id) do nothing
-                """)
-                        .param("id", account.id().value())
-                        .param("currency", account.balance().currency().getCurrencyCode())
-                        .param("overdraft", account.allowOverdraft())
-                        .update()
+        return handle.createUpdate("""
+                        insert into account (id, currency, allow_overdraft) values (:id, :currency, :overdraft)
+                        on conflict (id) do nothing
+                        """)
+                        .bind("id", account.id().value())
+                        .bind("currency", account.balance().currency().getCurrencyCode())
+                        .bind("overdraft", account.allowOverdraft())
+                        .execute()
                 == 1;
     }
 
     public Optional<Account> find(AccountId id) {
-        return jdbc.sql(COLUMNS + "where id = :id")
-                .param("id", id.value())
-                .query(AccountStore::map)
-                .optional();
+        return handle.createQuery(COLUMNS + "where id = :id")
+                .bind("id", id.value())
+                .map(AccountStore::map)
+                .findOne();
     }
 
     public List<Account> lockInIdOrder(AccountId first, AccountId second) {
-        return jdbc.sql(COLUMNS + "where id in (:first, :second) order by id for update")
-                .param("first", first.value())
-                .param("second", second.value())
-                .query(AccountStore::map)
+        return handle.createQuery(COLUMNS + "where id in (:first, :second) order by id for update")
+                .bind("first", first.value())
+                .bind("second", second.value())
+                .map(AccountStore::map)
                 .list();
     }
 
@@ -55,28 +48,28 @@ public class AccountStore {
     }
 
     public List<Account> readWithoutLock(AccountId first, AccountId second) {
-        return jdbc.sql(COLUMNS + "where id in (:first, :second)")
-                .param("first", first.value())
-                .param("second", second.value())
-                .query(AccountStore::map)
+        return handle.createQuery(COLUMNS + "where id in (:first, :second)")
+                .bind("first", first.value())
+                .bind("second", second.value())
+                .map(AccountStore::map)
                 .list();
     }
 
     private Optional<Account> lock(AccountId id) {
-        return jdbc.sql(COLUMNS + "where id = :id for update")
-                .param("id", id.value())
-                .query(AccountStore::map)
-                .optional();
+        return handle.createQuery(COLUMNS + "where id = :id for update")
+                .bind("id", id.value())
+                .map(AccountStore::map)
+                .findOne();
     }
 
     public void updateBalance(Account account) {
-        jdbc.sql("update account set balance_minor = :balance where id = :id")
-                .param("balance", account.balance().amountMinor())
-                .param("id", account.id().value())
-                .update();
+        handle.createUpdate("update account set balance_minor = :balance where id = :id")
+                .bind("balance", account.balance().amountMinor())
+                .bind("id", account.id().value())
+                .execute();
     }
 
-    private static Account map(ResultSet rs, int row) throws SQLException {
+    private static Account map(ResultSet rs, StatementContext context) throws SQLException {
         return new Account(
                 new AccountId(rs.getObject("id", UUID.class)),
                 Money.of(rs.getLong("balance_minor"), rs.getString("currency")),
